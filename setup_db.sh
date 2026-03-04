@@ -47,7 +47,7 @@ INSERT INTO inventory (id, company_id, item_code, item_name, current_stock, min_
 
 INSERT INTO inventory_order_logs (id, user_id, item_id, stock, status, created_at, updated_at) VALUES 
 ('io-log1', 'u1', 'inv1', 100, 'PENDING', 'mm-dd', 'mm-dd'),
-('io-log2', 'u1', 'inv2', 300, 'PENDING', 'mm-dd', 'mm-dd');
+('io-log2', 'u2', 'inv2', 300, 'PENDING', 'mm-dd', 'mm-dd');
 
 -- [제조 데이터] 제품 및 BOM
 INSERT INTO product (id, product_code, product_name, product_stock, description) VALUES 
@@ -60,7 +60,7 @@ INSERT INTO product_items (id, item_id, product_id, quantity_required, unit, loc
 
 INSERT INTO product_order_logs (id, user_id, product_id, order_count, motor_speed, status, created_at, updated_at) VALUES
 ('po1', 'u1', 'prod1', 300, 50, 'IN_PROGRESS','02-25','02-26'),
-('po2', 'u1', 'prod1', 500, 70, 'IN_PROGRESS','03-01','03-03');
+('po2', 'u2', 'prod1', 500, 70, 'IN_PROGRESS','03-01','03-03');
 
 INSERT INTO product_deli_logs (id, company_id, product_id, delivery_stock, status, created_at, updated_at) VALUES
 (pd1, c1, prod1, 50, 'COMPLETED', '02-15', '02-24'),
@@ -69,13 +69,13 @@ INSERT INTO product_deli_logs (id, company_id, product_id, delivery_stock, statu
 
 -- [실시간 로그] 환경 및 생산
 INSERT INTO product_logs (id, order_id, user_id, assignment_part, motor_speed, prod_count, defect_count, status, started_at, ended_at) VALUES
-(prod_live1, pd1, u1, )
+(prod_live1, pd1, u1, '?', 50, 100, 5, 'IN_PROGRESS', '02-26', '03-07'),
+(prod_live2, pd2, u2, '?', 70, 300, 10, 'IN_PROGRESS', '03-02', '03-10');
 
+INSERT INTO process (id, process_name) VALUES (env_pro1, TEMP), (env_pro2, FLAME);
 
-INSERT INTO environment_logs (id, process_id, sensor_type, sensor_value) 
-VALUES ('env1', 'p1', 'TEMP', '26.5'), ('env2', 'p1', 'FLAME', '0');
-
-
+INSERT INTO environment_logs (id, process_id, sensor_type, sensor_value) VALUES
+('env1', 'p1', 'TEMP', '26.5'), ('env2', 'p1', 'FLAME', '0');
 EOF
 
 echo "✅ 모든 데이터가 성공적으로 삽입되었습니다."
