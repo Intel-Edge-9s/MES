@@ -30,6 +30,12 @@ if(${QT_VERSION_MAJOR} GREATER_EQUAL 6)
         src/services/opcua_service.cpp
 
         # Views
+        src/views/base/base_page_widget.h
+        src/views/base/page_types.h
+
+        src/views/base/base_page_widget.h
+        src/views/base/page_types.h
+
         src/views/mainwindow.h
         src/views/mainwindow.cpp
         src/views/mainwindow.ui
@@ -46,6 +52,7 @@ if(${QT_VERSION_MAJOR} GREATER_EQUAL 6)
         src/views/dashboard_widget.cpp
         src/views/dashboard_widget.ui
 
+
         src/views/partner_manage_widget.cpp
         src/views/partner_manage_widget.h
         src/views/partner_manage_widget.ui
@@ -53,6 +60,9 @@ if(${QT_VERSION_MAJOR} GREATER_EQUAL 6)
         src/views/logistics_schedule_dialog.h
         src/views/logistics_schedule_dialog.cpp
         src/views/logistics_schedule_dialog.ui
+        src/views/scm_manage_widget.cpp
+        src/views/scm_manage_widget.h
+        src/views/scm_manage_widget.ui
     )
 else()
     if(ANDROID)
@@ -70,8 +80,7 @@ target_include_directories(MainUI PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/src/core
     ${CMAKE_CURRENT_SOURCE_DIR}/src/services
     ${CMAKE_CURRENT_SOURCE_DIR}/src/views
-
-    /usr/local/include            # ✅ open62541 headers
+    /usr/local/include
 )
 
 # (선택) 정적 링크에서 심볼 누락/순서 꼬임 방지용
