@@ -9,6 +9,11 @@ DashboardWidget::DashboardWidget(QWidget *parent) :
 
 DashboardWidget::~DashboardWidget() { delete ui; }
 
+void DashboardWidget::showEvent(QShowEvent *event) {
+    QWidget::showEvent(event); // 부모 클래스의 기본 동작 호출
+    this->initChart();         // 화면에 뜰 때 스스로 차트 초기화!
+}
+
 void DashboardWidget::initChart() {
     qDebug() << "Dashboard: initChart() called!";
 

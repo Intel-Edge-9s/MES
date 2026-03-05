@@ -18,9 +18,16 @@
     <item>
      <widget class="QStackedWidget" name="stackedWidget">
       <property name="currentIndex">
+<<<<<<< HEAD
        <number>3</number>
       </property>
       <widget class="LoginWidget" name="loginPage"/>
+=======
+       <number>2</number>
+      </property>
+      <widget class="LoginWidget" name="loginPage"/>
+      <widget class="TestWidget" name="testPage"/>
+>>>>>>> 6cdd5f6ac690d66f5a2795e9950fdcb3d7150f87
       <widget class="PartnerManageWidget" name="partnerManagePage"/>
       <widget class="DashboardWidget" name="dashBoardPage"/>
       <widget class="ScmManageWidget" name="ScmManagePage"/>
@@ -54,17 +61,29 @@
    <container>1</container>
   </customwidget>
   <customwidget>
+<<<<<<< HEAD
+=======
+   <class>TestWidget</class>
+   <extends>QWidget</extends>
+   <header>test_widget.h</header>
+   <container>1</container>
+  </customwidget>
+  <customwidget>
+>>>>>>> 6cdd5f6ac690d66f5a2795e9950fdcb3d7150f87
    <class>PartnerManageWidget</class>
    <extends>QWidget</extends>
    <header>partner_manage_widget.h</header>
    <container>1</container>
   </customwidget>
+<<<<<<< HEAD
   <customwidget>
    <class>ScmManageWidget</class>
    <extends>QWidget</extends>
    <header>scm_manage_widget.h</header>
    <container>1</container>
   </customwidget>
+=======
+>>>>>>> 6cdd5f6ac690d66f5a2795e9950fdcb3d7150f87
  </customwidgets>
  <resources/>
  <connections/>

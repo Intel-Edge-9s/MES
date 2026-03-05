@@ -38,6 +38,7 @@
      </widget>
     </item>
     <item row="1" column="0">
+<<<<<<< HEAD
      <widget class="QTableWidget" name="tableSuppCompany">
       <property name="editTriggers">
        <set>QAbstractItemView::EditTrigger::NoEditTriggers</set>
@@ -62,6 +63,12 @@
        <enum>QAbstractItemView::SelectionBehavior::SelectRows</enum>
       </property>
      </widget>
+=======
+     <widget class="QTableWidget" name="tableSuppCompany"/>
+    </item>
+    <item row="3" column="0">
+     <widget class="QTableWidget" name="tableCustCompany"/>
+>>>>>>> 6cdd5f6ac690d66f5a2795e9950fdcb3d7150f87
     </item>
    </layout>
   </widget>

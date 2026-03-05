@@ -24,6 +24,10 @@ private slots:
 
 private:
     Ui::DashboardWidget *ui;
+
+protected:
+    // QWidget의 showEvent를 재정의합니다.
+    void showEvent(QShowEvent *event) override;
 };
 
 #endif

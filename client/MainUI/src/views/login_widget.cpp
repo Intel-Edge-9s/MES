@@ -19,7 +19,9 @@ void LoginWidget::on_loginBtn_clicked()
     QString user = ui->userEdit->text();
     QString pw = ui->passEdit->text();
 
+    // Web으로 비유 => HTTP Response
     if (m_authService.authenticate(user, pw)) {
+        // 200 OK
         emit loginSuccess();
     } else {
         qDebug() << "Login Failed";

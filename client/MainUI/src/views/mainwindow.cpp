@@ -12,12 +12,15 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), ui(new Ui::MainWi
     LoginWidget* login = qobject_cast<LoginWidget*>(ui->loginPage);
     DashboardWidget* dashboard = qobject_cast<DashboardWidget*>(ui->dashBoardPage); // 캐스팅
 
+    // 웹으로 비유하면 API Gateway (Router)
+    // login_widget.ui에서 emit loginSucess시 아래 코드 실행 (Navigation)
     connect(login, &LoginWidget::loginSuccess, this, [this](){
         ui->stackedWidget->setCurrentWidget(ui->dashBoardPage);
+    });
 
-        // 대시보드 위젯을 가져와서 차트 초기화
-        DashboardWidget* dashboard = qobject_cast<DashboardWidget*>(ui->dashBoardPage);
-        if (dashboard) dashboard->initChart();
+    // 대시보드 위젯(dashBoardPage)에서 오는 시그널을 stackedWidget의 setCurrentIndex와 연결
+    connect(ui->dashBoardPage, &DashboardWidget::PageChangeCompLists, this, [this](){
+        ui->stackedWidget->setCurrentWidget(ui->partnerManagePage); // 인덱스 번호 대신 위젯 객체로 직접 지정
     });
 
     // 대시보드 위젯(dashBoardPage)에서 오는 시그널을 stackedWidget의 setCurrentIndex와 연결
