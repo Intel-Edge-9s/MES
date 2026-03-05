@@ -200,3 +200,7 @@ void DashboardWidget::on_CompanyListBtn_clicked()
 {
     emit requestPageChange(PageType::PartnerManage);
 }
+
+void DashboardWidget::on_CompanyListBtn_clicked(){
+    emit PageChangeCompLists(2);
+}

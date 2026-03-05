@@ -52,9 +52,14 @@ if(${QT_VERSION_MAJOR} GREATER_EQUAL 6)
         src/views/dashboard_widget.cpp
         src/views/dashboard_widget.ui
 
+
         src/views/partner_manage_widget.cpp
         src/views/partner_manage_widget.h
         src/views/partner_manage_widget.ui
+
+        src/views/scm_manage_widget.cpp
+        src/views/scm_manage_widget.h
+        src/views/scm_manage_widget.ui
     )
 else()
     if(ANDROID)
