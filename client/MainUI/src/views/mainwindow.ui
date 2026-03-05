@@ -18,10 +18,9 @@
     <item>
      <widget class="QStackedWidget" name="stackedWidget">
       <property name="currentIndex">
-       <number>2</number>
+       <number>1</number>
       </property>
       <widget class="LoginWidget" name="loginPage"/>
-      <widget class="TestWidget" name="testPage"/>
       <widget class="PartnerManageWidget" name="partnerManagePage"/>
       <widget class="DashboardWidget" name="dashBoardPage"/>
      </widget>
@@ -51,12 +50,6 @@
    <class>DashboardWidget</class>
    <extends>QWidget</extends>
    <header>dashboard_widget.h</header>
-   <container>1</container>
-  </customwidget>
-  <customwidget>
-   <class>TestWidget</class>
-   <extends>QWidget</extends>
-   <header>test_widget.h</header>
    <container>1</container>
   </customwidget>
   <customwidget>
