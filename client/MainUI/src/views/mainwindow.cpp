@@ -12,12 +12,10 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), ui(new Ui::MainWi
     LoginWidget* login = qobject_cast<LoginWidget*>(ui->loginPage);
     DashboardWidget* dashboard = qobject_cast<DashboardWidget*>(ui->dashBoardPage); // 캐스팅
 
+    // 웹으로 비유하면 API Gateway (Router)
+    // login_widget.ui에서 emit loginSucess시 아래 코드 실행 (Navigation)
     connect(login, &LoginWidget::loginSuccess, this, [this](){
         ui->stackedWidget->setCurrentWidget(ui->dashBoardPage);
-
-        // 대시보드 위젯을 가져와서 차트 초기화
-        DashboardWidget* dashboard = qobject_cast<DashboardWidget*>(ui->dashBoardPage);
-        if (dashboard) dashboard->initChart();
     });
 }
 // 에러 원인 1: 소멸자 구현 누락 해결
