@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <ui version="4.0">
  <class>LogisticsScheduleDialog</class>
- <widget class="QDialog" name="logisticsScheduleDialog">
+ <widget class="QDialog" name="LogisticsScheduleDialog">
   <property name="geometry">
    <rect>
     <x>0</x>

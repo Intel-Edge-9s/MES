@@ -7,7 +7,7 @@
 #include <QDebug>
 
 PartnerManageWidget::PartnerManageWidget(QWidget *parent) :
-    QWidget(parent),
+    BasePageWidget(parent),
     ui(new Ui::PartnerManageWidget)
 {
     ui->setupUi(this);
@@ -57,3 +57,9 @@ PartnerManageWidget::~PartnerManageWidget()
 {
     delete ui;
 }
+
+void PartnerManageWidget::on_Back_btn_clicked()
+{
+    emit requestPageChange(PageType::Dashboard);
+}
+

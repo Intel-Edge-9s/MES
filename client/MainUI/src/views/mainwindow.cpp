@@ -10,17 +10,17 @@ MainWindow::MainWindow(QWidget *parent)
     : QMainWindow(parent), ui(new Ui::MainWindow) {
     ui->setupUi(this);
     //===========================================
-    //
+    //start
     //===========================================
     ua = new OpcUaService(this);
     //===========================================
-    //
+    //end
     //===========================================
 
     setupNavigation();
     moveToPage(PageType::Login);
     //===========================================
-    //
+    //start
     //===========================================
     auto* login = qobject_cast<LoginWidget*>(ui->loginPage);
     if (login) {
@@ -39,8 +39,9 @@ MainWindow::MainWindow(QWidget *parent)
     }
 
     //===========================================
-    //
+    //end
     //===========================================
+
 
 }
 
@@ -82,9 +83,10 @@ void MainWindow::setupNavigation() {
     auto* login = qobject_cast<BasePageWidget*>(ui->loginPage);
     auto* dashboard = qobject_cast<BasePageWidget*>(ui->dashBoardPage);
     auto* partnerManage = qobject_cast<BasePageWidget*>(ui->partnerManagePage);
+    auto* scmManage = qobject_cast<BasePageWidget*>(ui->ScmManagePage);
 
     // 모든 위젯을 리스트에 담아 한 번에 연결 (중복 코드 방지)
-    QList<BasePageWidget*> pages = {login, dashboard, partnerManage};
+    QList<BasePageWidget*> pages = {login, dashboard, partnerManage,scmManage};
 
     for (BasePageWidget* page : pages) {
         if (page) {

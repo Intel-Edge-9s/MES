@@ -5,7 +5,7 @@
 #include <QDebug>
 
 ScmManageWidget::ScmManageWidget(QWidget *parent) :
-    QWidget(parent),
+    BasePageWidget(parent),
     ui(new Ui::ScmManageWidget)
 {
     ui->setupUi(this);
@@ -129,3 +129,9 @@ ScmManageWidget::~ScmManageWidget()
 {
     delete ui;
 }
+
+void ScmManageWidget::on_Back_btn_clicked()
+{
+    emit requestPageChange(PageType::Dashboard);
+}
+
