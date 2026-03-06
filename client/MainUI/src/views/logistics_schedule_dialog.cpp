@@ -1,4 +1,4 @@
-#include "logistics_schedule_dialog.h"
+﻿#include "logistics_schedule_dialog.h"
 #include "ui_logistics_schedule_dialog.h"
 
 LogisticsScheduleDialog::LogisticsScheduleDialog(QWidget *parent)
@@ -15,10 +15,7 @@ LogisticsScheduleDialog::LogisticsScheduleDialog(QWidget *parent)
     load_inventory_items();
 }
 
-LogisticsScheduleDialog::~LogisticsScheduleDialog()
-{
-    delete ui;
-}
+
 
 void LogisticsScheduleDialog::load_inventory_items()
 {
@@ -109,3 +106,10 @@ void LogisticsScheduleDialog::on_cancel_button_clicked()
 {
     reject(); // 팝업 닫기
 }
+
+LogisticsScheduleDialog::~LogisticsScheduleDialog()
+{
+    delete ui;
+}
+
+
