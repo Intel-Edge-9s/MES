@@ -23,8 +23,10 @@ void LoginWidget::on_loginBtn_clicked()
     if (m_authService.authenticate(user, pw)) {
         // 200 OK
         qDebug() << "Login Success!";
+        emit loginSuccess();
         emit requestPageChange(PageType::Dashboard);
     } else {
         qDebug() << "Login Failed";
     }
+
 }

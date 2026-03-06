@@ -3,6 +3,9 @@
 
 #include <QMainWindow>
 #include "base/page_types.h" // 1. 이 헤더가 반드시 포함되어야 합니다!
+#include "opcua_service.h"
+
+
 
 QT_BEGIN_NAMESPACE
 namespace Ui { class MainWindow; }
@@ -17,6 +20,10 @@ public:
 
 private:
     Ui::MainWindow *ui;
+
+    OpcUaService* ua = nullptr;
+    bool uaStarted = false;
+    void startOpcUaOnce();
 
     void setupNavigation();
     // 2. 에러 메시지에서 'int'로 인식되던 부분을 'PageType'으로 명확히 수정합니다.
