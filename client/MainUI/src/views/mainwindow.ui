@@ -18,11 +18,13 @@
     <item>
      <widget class="QStackedWidget" name="stackedWidget">
       <property name="currentIndex">
-       <number>3</number>
+       <number>4</number>
       </property>
       <widget class="LoginWidget" name="loginPage"/>
       <widget class="PartnerManageWidget" name="partnerManagePage"/>
       <widget class="DashboardWidget" name="dashBoardPage"/>
+      <widget class="DeliveryWidget" name="deliveryPage"/>
+      <widget class="ProcessWidget" name="processPage"/>
       <widget class="ScmManageWidget" name="ScmManagePage"/>
      </widget>
     </item>
@@ -63,6 +65,18 @@
    <class>ScmManageWidget</class>
    <extends>QWidget</extends>
    <header>scm_manage_widget.h</header>
+   <container>1</container>
+  </customwidget>
+  <customwidget>
+   <class>DeliveryWidget</class>
+   <extends>QWidget</extends>
+   <header>delivery_widget.h</header>
+   <container>1</container>
+  </customwidget>
+  <customwidget>
+   <class>ProcessWidget</class>
+   <extends>QWidget</extends>
+   <header>process_widget.h</header>
    <container>1</container>
   </customwidget>
  </customwidgets>

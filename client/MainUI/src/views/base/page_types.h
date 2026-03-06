@@ -7,7 +7,8 @@ enum class PageType {
     Dashboard,
     PartnerManage,
     ScmManage,
-    Delivery
+    Delivery,
+    Process
     // 새로운 페이지가 추가되면 여기에 이름만 추가해야 함
 };
 

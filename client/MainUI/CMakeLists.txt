@@ -22,15 +22,21 @@ if(${QT_VERSION_MAJOR} GREATER_EQUAL 6)
         # Core
         src/core/database_manager.h
         src/core/database_manager.cpp
+
         src/core/user_session.h
 
         # Services
         src/services/auth_service.h
         src/services/auth_service.cpp
+
         src/services/opcua_service.h
         src/services/opcua_service.cpp
+
         src/services/partner_manage_service.h
         src/services/partner_manage_service.cpp
+
+        src/services/delivery_service.cpp
+        src/services/delivery_service.h
 
         # Models
         src/models/company_model.h
@@ -58,17 +64,26 @@ if(${QT_VERSION_MAJOR} GREATER_EQUAL 6)
         src/views/dashboard_widget.cpp
         src/views/dashboard_widget.ui
 
-
         src/views/partner_manage_widget.cpp
         src/views/partner_manage_widget.h
         src/views/partner_manage_widget.ui
 
-        src/views/logistics_schedule_dialog.h
-        src/views/logistics_schedule_dialog.cpp
-        src/views/logistics_schedule_dialog.ui
         src/views/scm_manage_widget.cpp
         src/views/scm_manage_widget.h
         src/views/scm_manage_widget.ui
+
+        src/views/delivery_widget.cpp
+        src/views/delivery_widget.h
+        src/views/delivery_widget.ui
+
+
+        src/views/delivery_dialog.cpp
+        src/views/delivery_dialog.h
+        src/views/delivery_dialog.ui
+
+        src/views/logistics_schedule_dialog.h
+        src/views/logistics_schedule_dialog.cpp
+        src/views/logistics_schedule_dialog.ui
     )
 else()
     if(ANDROID)

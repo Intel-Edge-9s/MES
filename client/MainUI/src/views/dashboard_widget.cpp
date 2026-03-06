@@ -213,3 +213,11 @@ void DashboardWidget::on_ScmManageBtn_clicked()
 {
     emit requestPageChange(PageType::ScmManage);
 }
+void DashboardWidget::on_DeliveryBtn_clicked()
+{
+    emit requestPageChange(PageType::Delivery);
+}
+void DashboardWidget::on_ProcessBtn_clicked()
+{
+    emit requestPageChange(PageType::Delivery);
+}

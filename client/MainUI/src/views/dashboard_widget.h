@@ -30,6 +30,8 @@ protected:
 private slots:
     void on_CompanyListBtn_clicked();
     void on_ScmManageBtn_clicked();
+    void on_DeliveryBtn_clicked();
+    void on_ProcessBtn_clicked();
 
 
 private:

@@ -23,7 +23,7 @@
     </rect>
    </property>
    <property name="text">
-    <string>Comp.List</string>
+    <string>협력 업체</string>
    </property>
   </widget>
   <widget class="QWidget" name="verticalLayoutWidget_3">
@@ -37,7 +37,7 @@
    </property>
    <layout class="QVBoxLayout" name="prodChartLayout"/>
   </widget>
-  <widget class="QPushButton" name="pushButton">
+  <widget class="QPushButton" name="DeliveryBtn">
    <property name="geometry">
     <rect>
      <x>31</x>
@@ -47,7 +47,7 @@
     </rect>
    </property>
    <property name="text">
-    <string>PushButton</string>
+    <string>납품 관리</string>
    </property>
   </widget>
   <widget class="QPushButton" name="ScmManageBtn">
@@ -60,7 +60,7 @@
     </rect>
    </property>
    <property name="text">
-    <string>SCM Manage</string>
+    <string>원재료 관리</string>
    </property>
   </widget>
   <widget class="QPushButton" name="pushButton_3">
@@ -73,7 +73,7 @@
     </rect>
    </property>
    <property name="text">
-    <string>PushButton</string>
+    <string>생산 관리</string>
    </property>
   </widget>
   <widget class="QPushButton" name="pushButton_4">
@@ -86,10 +86,10 @@
     </rect>
    </property>
    <property name="text">
-    <string>PushButton</string>
+    <string>에러 로그</string>
    </property>
   </widget>
-  <widget class="QPushButton" name="pushButton_5">
+  <widget class="QPushButton" name="ProcessBtn">
    <property name="geometry">
     <rect>
      <x>411</x>
@@ -99,33 +99,33 @@
     </rect>
    </property>
    <property name="text">
-    <string>PushButton</string>
+    <string>공정 관리</string>
    </property>
   </widget>
   <widget class="QPushButton" name="pushButton_6">
    <property name="geometry">
     <rect>
-     <x>600</x>
-     <y>480</y>
-     <width>161</width>
+     <x>920</x>
+     <y>580</y>
+     <width>121</width>
      <height>61</height>
     </rect>
    </property>
    <property name="text">
-    <string>PushButton</string>
+    <string>제조 서버 재 접속</string>
    </property>
   </widget>
   <widget class="QPushButton" name="pushButton_7">
    <property name="geometry">
     <rect>
-     <x>600</x>
-     <y>560</y>
-     <width>161</width>
+     <x>760</x>
+     <y>580</y>
+     <width>121</width>
      <height>61</height>
     </rect>
    </property>
    <property name="text">
-    <string>PushButton</string>
+    <string>물류 서버 재 접속</string>
    </property>
   </widget>
   <widget class="QWidget" name="verticalLayoutWidget_4">
@@ -133,8 +133,8 @@
     <rect>
      <x>30</x>
      <y>20</y>
-     <width>231</width>
-     <height>171</height>
+     <width>251</width>
+     <height>191</height>
     </rect>
    </property>
    <layout class="QVBoxLayout" name="storageA01ChartLayout"/>
@@ -143,9 +143,9 @@
    <property name="geometry">
     <rect>
      <x>30</x>
-     <y>210</y>
-     <width>231</width>
-     <height>171</height>
+     <y>230</y>
+     <width>251</width>
+     <height>191</height>
     </rect>
    </property>
    <layout class="QVBoxLayout" name="storageB02ChartLayout"/>
@@ -153,10 +153,10 @@
   <widget class="QWidget" name="verticalLayoutWidget_6">
    <property name="geometry">
     <rect>
-     <x>290</x>
+     <x>300</x>
      <y>20</y>
-     <width>231</width>
-     <height>171</height>
+     <width>251</width>
+     <height>191</height>
     </rect>
    </property>
    <layout class="QVBoxLayout" name="storageC03ChartLayout"/>
@@ -165,7 +165,62 @@
    <property name="geometry">
     <rect>
      <x>30</x>
-     <y>400</y>
+     <y>630</y>
+     <width>221</width>
+     <height>21</height>
+    </rect>
+   </property>
+   <property name="styleSheet">
+    <string notr="true"/>
+   </property>
+   <property name="text">
+    <string>TextLabel</string>
+   </property>
+  </widget>
+  <widget class="QLabel" name="label">
+   <property name="geometry">
+    <rect>
+     <x>310</x>
+     <y>240</y>
+     <width>57</width>
+     <height>14</height>
+    </rect>
+   </property>
+   <property name="text">
+    <string>TextLabel</string>
+   </property>
+  </widget>
+  <widget class="QLabel" name="label_2">
+   <property name="geometry">
+    <rect>
+     <x>310</x>
+     <y>270</y>
+     <width>57</width>
+     <height>14</height>
+    </rect>
+   </property>
+   <property name="text">
+    <string>TextLabel</string>
+   </property>
+  </widget>
+  <widget class="QLabel" name="label_3">
+   <property name="geometry">
+    <rect>
+     <x>310</x>
+     <y>300</y>
+     <width>57</width>
+     <height>14</height>
+    </rect>
+   </property>
+   <property name="text">
+    <string>TextLabel</string>
+   </property>
+  </widget>
+  <widget class="QLabel" name="label_4">
+   <property name="geometry">
+    <rect>
+     <x>310</x>
+     <y>330</y>
      <width>57</width>
      <height>14</height>
     </rect>
