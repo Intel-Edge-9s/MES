@@ -28,6 +28,11 @@ if(${QT_VERSION_MAJOR} GREATER_EQUAL 6)
         src/services/auth_service.cpp
         src/services/opcua_service.h
         src/services/opcua_service.cpp
+        src/services/partner_manage_service.h
+        src/services/partner_manage_service.cpp
+
+        # Models
+        src/models/company_model.h
 
         # Views
         src/views/base/base_page_widget.h

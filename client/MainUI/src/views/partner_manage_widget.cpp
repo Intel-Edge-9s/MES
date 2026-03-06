@@ -1,5 +1,6 @@
 ﻿#include "partner_manage_widget.h"
 #include "ui_partner_manage_widget.h"
+#include "../services/partner_manage_service.h"
 #include "../core/database_manager.h"
 #include <QSqlQuery>               //
 #include <QSqlError>
@@ -26,51 +27,32 @@ void PartnerManageWidget::setupTableConfigs(){
     ui->tableCustCompany->setHorizontalHeaderLabels(headers);
     ui->tableCustCompany->horizontalHeader()->setSectionResizeMode(QHeaderView::Stretch);
 }
+void PartnerManageWidget::loadAllData() {
+    // 1. 서비스에 데이터 요청 (API 호출과 유사)
+    auto suppliers = PartnerService::getSuppliers();
+    auto customers = PartnerService::getCustomers();
 
-void PartnerManageWidget::loadAllData(){
-    if(!DatabaseManager::instance().connect()){
-        qDebug() << "Database connect failed!";
-        return;
+    // 2. 결과 출력 (Supplier 테이블)
+    ui->tableSuppCompany->setRowCount(0);
+    for (int i = 0; i < suppliers.size(); ++i) {
+        ui->tableSuppCompany->insertRow(i);
+        ui->tableSuppCompany->setItem(i, 0, new QTableWidgetItem(suppliers[i].name));
+        ui->tableSuppCompany->setItem(i, 1, new QTableWidgetItem(suppliers[i].address));
+        ui->tableSuppCompany->setItem(i, 2, new QTableWidgetItem(suppliers[i].contact));
+        ui->tableSuppCompany->item(i, 0)->setData(Qt::UserRole, suppliers[i].id);
     }
-
-    QSqlQuery query;
-    // 1. 쿼리는 그대로 유지 (나중에 삭제/수정 기능을 위해 id가 필요함)
-    query.prepare("SELECT id, company_name, company_address, company_number FROM supp_company");
-
-    if (query.exec()) {
-        ui->tableSuppCompany->setRowCount(0);
-        int row = 0;
-        while (query.next()) {
-            ui->tableSuppCompany->insertRow(row);
-
-            // 2. UI에는 UUID를 제외하고 name, address, contact 순서로 매핑
-            // query.value(0)은 'id'이므로 건너뛰고 1번부터 사용합니다.
-            ui->tableSuppCompany->setItem(row, 0, new QTableWidgetItem(query.value("company_name").toString()));
-            ui->tableSuppCompany->setItem(row, 1, new QTableWidgetItem(query.value("company_address").toString()));
-            ui->tableSuppCompany->setItem(row, 2, new QTableWidgetItem(query.value("company_number").toString()));
-
-            // 팁: UUID를 숨겨두고 싶다면 'id'를 데이터 역할(UserRole)로 저장해둘 수 있습니다.
-            ui->tableSuppCompany->item(row, 0)->setData(Qt::UserRole, query.value("id").toString());
-
-            row++;
-        }
-    }
-
-    if (query.exec("SELECT id, company_name, company_address, company_number FROM cust_company")) {
-        ui->tableCustCompany->setRowCount(0);
-        int row = 0;
-        while (query.next()) {
-            ui->tableCustCompany->insertRow(row);
-            ui->tableCustCompany->setItem(row, 0, new QTableWidgetItem(query.value("company_name").toString()));
-            ui->tableCustCompany->setItem(row, 1, new QTableWidgetItem(query.value("company_address").toString()));
-            ui->tableCustCompany->setItem(row, 2, new QTableWidgetItem(query.value("company_number").toString()));
-
-            // 팁: UUID를 숨겨두고 싶다면 'id'를 데이터 역할(UserRole)로 저장해둘 수 있습니다.
-            ui->tableCustCompany->item(row, 0)->setData(Qt::UserRole, query.value("id").toString());
-            row++;
-        }
+    
+    // Customer 테이블도 동일하게 처리...
+    ui->tableCustCompany->setRowCount(0);
+    for (int i = 0; i < customers.size(); ++i) {
+        ui->tableCustCompany->insertRow(i);
+        ui->tableCustCompany->setItem(i, 0, new QTableWidgetItem(customers[i].name));
+        ui->tableCustCompany->setItem(i, 1, new QTableWidgetItem(customers[i].address));
+        ui->tableCustCompany->setItem(i, 2, new QTableWidgetItem(customers[i].contact));
+        ui->tableCustCompany->item(i, 0)->setData(Qt::UserRole, customers[i].id);
     }
 }
+
 PartnerManageWidget::~PartnerManageWidget()
 {
     delete ui;
