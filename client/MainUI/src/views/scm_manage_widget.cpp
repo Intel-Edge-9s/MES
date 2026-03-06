@@ -1,7 +1,9 @@
 ﻿#include "scm_manage_widget.h"
 #include "ui_scm_manage_widget.h"
+#include "user_session.h"
 #include "order_edit_dialog.h"
 #include "scm_manage_service.h"
+#include "logistics_schedule_dialog.h"
 #include <QSqlQuery>               //
 #include <QSqlError>
 #include <QDebug>
@@ -90,53 +92,26 @@ void ScmManageWidget::loadInventoryOrderData(){
         ui->tableStockOrder->item(i, 0)->setData(Qt::UserRole, orders[i].id);
     }
 }
-void ScmManageWidget::on_create_order_button_clicked()
-{
-    // 입고 스케줄 생성 팝업 호출
-    LogisticsScheduleDialog *dialog = new LogisticsScheduleDialog(this);
-
-    // 팝업 닫힌 후 테이블 새로고침
-    if (dialog->exec() == QDialog::Accepted) {
-        loadInventoryOrderData();
-    }
-}
 
 void ScmManageWidget::on_cancel_order_button_clicked()
 {
-    // 선택된 행 확인
     int row = ui->tableStockOrder->currentRow();
-    if (row < 0) {
-        qDebug() << "취소할 항목을 선택해주세요.";
-        return;
-    }
+    if (row < 0) return;
 
-    // 완료된 항목은 취소 불가
+    // 1. 상태 확인 (3번 컬럼: Status)
     QString status = ui->tableStockOrder->item(row, 3)->text();
-    if (status == "DONE") {
-        qDebug() << "이미 완료된 항목은 취소할 수 없습니다.";
+    if (status == "DONE" || status == "INPROC") { // 진행 중이거나 완료된 것은 취소 불가
+        qDebug() << "취소할 수 없는 상태입니다.";
         return;
     }
 
-    // 숨겨진 컬럼에서 id 가져오기
-    QString selected_id = ui->tableStockOrder->item(row, 7)->text();
+    // 2. 0번 컬럼에 숨겨둔 UserRole 데이터(ID) 가져오기
+    QString selected_id = ui->tableStockOrder->item(row, 0)->data(Qt::UserRole).toString();
 
-    // DB 연결 확인
-    QSqlDatabase db = QSqlDatabase::database();
-    if (!db.isOpen()) {
-        qDebug() << "DB 연결이 열려있지 않습니다.";
-        return;
-    }
-
-    // DB에서 해당 row 삭제
-    QSqlQuery query(db);
-    query.prepare("DELETE FROM inventory_order_logs WHERE id = :id");
-    query.bindValue(":id", selected_id);
-
-    if (query.exec()) {
-        qDebug() << "[스케줄 취소 성공]" << selected_id;
-        loadInventoryOrderData(); // 테이블 새로고침
-    } else {
-        qDebug() << "[스케줄 취소 실패]" << query.lastError().text();
+    // 3. 서비스 호출 (직접 쿼리 대신)
+    if (ScmManageService::cancelOrder(selected_id)) {
+        qDebug() << "취소 성공";
+        loadInventoryOrderData(); // 새로고침
     }
 }
 
@@ -152,12 +127,21 @@ void ScmManageWidget::on_pushButton_clicked()
 
     if (dialog.exec() == QDialog::Accepted) {
         // 서비스 호출로 주문 추가
+
+
+        QString selectedDate = dialog.getDueDateTime();
         bool success = ScmManageService::addOrder("userName",
                                             dialog.getSelectedItemCode(),
-                                            dialog.getOrderAmount());
+                                            dialog.getOrderAmount(),
+                                            selectedDate);
         if (success) {
             loadInventoryOrderData();
         }
     }
+}
+
+void ScmManageWidget::on_Back_btn_clicked()
+{
+    emit requestPageChange(PageType::Dashboard);
 }
 

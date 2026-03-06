@@ -1,4 +1,4 @@
-<?xml version="1.0" encoding="UTF-8"?>
+﻿<?xml version="1.0" encoding="UTF-8"?>
 <ui version="4.0">
  <class>ScmManageWidget</class>
  <widget class="QWidget" name="ScmManageWidget">
@@ -17,7 +17,7 @@
    <property name="geometry">
     <rect>
      <x>60</x>
-     <y>30</y>
+     <y>70</y>
      <width>951</width>
      <height>161</height>
     </rect>
@@ -49,7 +49,7 @@
    <property name="geometry">
     <rect>
      <x>60</x>
-     <y>230</y>
+     <y>280</y>
      <width>951</width>
      <height>341</height>
     </rect>
@@ -78,9 +78,9 @@
     <item row="1" column="0">
      <layout class="QHBoxLayout" name="button_layout">
       <item>
-       <widget class="QPushButton" name="create_order_button">
+       <widget class="QPushButton" name="pushButton">
         <property name="text">
-         <string>Create Order</string>
+         <string>Add Order</string>
         </property>
        </widget>
       </item>
@@ -94,7 +94,13 @@
       <item>
        <spacer name="horizontalSpacer">
         <property name="orientation">
-         <enum>Qt::Horizontal</enum>
+         <enum>Qt::Orientation::Horizontal</enum>
+        </property>
+        <property name="sizeHint" stdset="0">
+         <size>
+          <width>0</width>
+          <height>0</height>
+         </size>
         </property>
        </spacer>
       </item>
@@ -102,29 +108,17 @@
     </item>
    </layout>
   </widget>
-<<<<<<< Updated upstream
   <widget class="QPushButton" name="Back_btn">
    <property name="geometry">
     <rect>
      <x>10</x>
-     <y>0</y>
-=======
-  <widget class="QPushButton" name="pushButton">
-   <property name="geometry">
-    <rect>
-     <x>930</x>
-     <y>590</y>
->>>>>>> Stashed changes
+     <y>10</y>
      <width>80</width>
-     <height>22</height>
+     <height>30</height>
     </rect>
    </property>
    <property name="text">
-<<<<<<< Updated upstream
     <string>Back</string>
-=======
-    <string>Order Edit</string>
->>>>>>> Stashed changes
    </property>
   </widget>
  </widget>

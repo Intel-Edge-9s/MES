@@ -24,6 +24,7 @@ public:
     void loadInventoryList();
     QString getSelectedItemCode() const;
     int getOrderAmount() const;
+    QString getDueDateTime() const;
 
 private slots:
     void updateDateTime();

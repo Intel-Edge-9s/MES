@@ -1,4 +1,5 @@
 ﻿#include "scm_manage_service.h"
+#include "../core/user_session.h"
 #include <QSqlQuery>
 #include <QSqlError>
 #include <QDebug>
@@ -22,13 +23,20 @@ QList<InventoryInfo> ScmManageService::getInventoryStatus(){
 }
 QList<OrderInfo> ScmManageService::getOrderLogs(){
     QList<OrderInfo> list;
-    QSqlQuery query("SELECT id, user_id, item_name, stock, status, created_at, receive_at, updated_at "
-                    "FROM inventory_order_logs ORDER BY created_at DESC");
+
+    // 💡 JOIN을 사용하여 user 테이블의 user_name을 가져옵니다.
+    // l은 inventory_order_logs의 별칭, u는 user의 별칭입니다.
+    QSqlQuery query("SELECT l.id, u.user_name, l.item_name, l.stock, l.status, "
+                    "l.created_at, l.receive_at, l.updated_at "
+                    "FROM inventory_order_logs l "
+                    "JOIN user u ON l.user_id = u.id "
+                    "ORDER BY l.created_at DESC");
 
     while (query.next()) {
         OrderInfo info;
         info.id = query.value("id").toString();
-        info.userName = query.value("user_id").toString(); // 나중에 이름 조인 가능, 수정필요
+        // 💡 이제 user_id 대신 JOIN으로 가져온 user_name을 사용합니다.
+        info.userName = query.value("user_name").toString();
         info.itemName = query.value("item_name").toString();
         info.stock = query.value("stock").toInt();
         info.status = query.value("status").toString();
@@ -41,16 +49,25 @@ QList<OrderInfo> ScmManageService::getOrderLogs(){
     return list;
 }
 
-bool ScmManageService::addOrder(const QString& userName, const QString& itemCode, int amount) {
+bool ScmManageService::addOrder(const QString& userName, const QString& itemCode, int amount, const QString& dueDate) {
     QSqlQuery query;
-    query.prepare("INSERT INTO inventory_order_logs (id, user_id, item_id, item_code, item_name, stock, status, created_at) "
-                  "SELECT UUID_v4(), (SELECT id FROM user WHERE user_name = :test), "
-                  "id, item_code, item_name, :amount, 'PENDING', NOW() "
+    query.prepare("INSERT INTO inventory_order_logs (id, user_id, item_id, item_code, item_name, stock, status, created_at, receive_at) "
+                  "SELECT UUID_v4(), :userId, "
+                  "id, item_code, item_name, :amount, 'PENDING', NOW(), :dueDate "
                   "FROM inventory WHERE item_code = :code");
 
-    query.bindValue(":userName", userName);
+
+    query.bindValue(":userId", UserSession::instance().userId());
     query.bindValue(":amount", amount);
     query.bindValue(":code", itemCode);
+    query.bindValue(":dueDate", dueDate);
 
+    return query.exec();
+}
+
+bool ScmManageService::cancelOrder(const QString& orderId) {
+    QSqlQuery query;
+    query.prepare("DELETE FROM inventory_order_logs WHERE id = :id");
+    query.bindValue(":id", orderId);
     return query.exec();
 }

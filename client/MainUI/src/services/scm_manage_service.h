@@ -11,7 +11,8 @@ class ScmManageService
 public:
     static QList<InventoryInfo> getInventoryStatus();
     static QList<OrderInfo> getOrderLogs();
-    static bool addOrder(const QString& userName, const QString& itemCode, int amount);
+    static bool addOrder(const QString& userName, const QString& itemCode, int amount, const QString& dueDate);
+    static bool cancelOrder(const QString& orderId);
 };
 
 #endif // SCM_MANAGE_SERVICE_H

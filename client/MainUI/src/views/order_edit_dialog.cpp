@@ -10,8 +10,10 @@ OrderEditDialog::OrderEditDialog(QWidget *parent) :
     timer = new QTimer(this);
     connect(timer, &QTimer::timeout, this, &OrderEditDialog::updateDateTime);
     timer->start(1000); // 1000ms = 1s
-
     updateDateTime();
+
+    ui->dateEditDue->setDate(QDate::currentDate());
+    ui->dateEditDue->setMinimumDate(QDate::currentDate()); // 오늘 이전 날짜는 선택 불가
 }
 
 void OrderEditDialog::loadInventoryList() {
@@ -43,6 +45,12 @@ int OrderEditDialog::getOrderAmount() const {
 void OrderEditDialog::updateDateTime(){
     QString currentTime = QDateTime::currentDateTime().toString("yyyy-MM-dd HH:mm:ss");
     ui->labelCurrentTime->setText(currentTime);
+}
+
+QString OrderEditDialog::getDueDateTime() const {
+    // QDateTimeEdit 위젯(예: dateTimeEditDue)에서 값을 가져옵니다.
+    // MariaDB의 DATETIME 형식인 "yyyy-MM-dd HH:mm:ss"로 변환합니다.
+    return ui->dateEditDue->dateTime().toString("yyyy-MM-dd HH:mm:ss");
 }
 
 OrderEditDialog::~OrderEditDialog()
