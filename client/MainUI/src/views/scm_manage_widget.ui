@@ -75,6 +75,31 @@
       </property>
      </widget>
     </item>
+    <item row="1" column="0">
+     <layout class="QHBoxLayout" name="button_layout">
+      <item>
+       <widget class="QPushButton" name="create_order_button">
+        <property name="text">
+         <string>Create Order</string>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <widget class="QPushButton" name="cancel_order_button">
+        <property name="text">
+         <string>Cancel Order</string>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <spacer name="horizontalSpacer">
+        <property name="orientation">
+         <enum>Qt::Horizontal</enum>
+        </property>
+       </spacer>
+      </item>
+     </layout>
+    </item>
    </layout>
   </widget>
   <widget class="QPushButton" name="Back_btn">

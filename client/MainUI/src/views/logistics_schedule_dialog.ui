@@ -26,7 +26,7 @@
     <string>Logistics Schedule</string>
    </property>
   </widget>
-  <widget class="QLabel" name="item_name_label">
+  <widget class="QLabel" name="item_code_label">
    <property name="geometry">
     <rect>
      <x>90</x>
@@ -36,10 +36,10 @@
     </rect>
    </property>
    <property name="text">
-    <string>Item Name</string>
+    <string>Item Code</string>
    </property>
   </widget>
-  <widget class="QLineEdit" name="item_name_edit">
+  <widget class="QComboBox" name="item_code_combo">
    <property name="geometry">
     <rect>
      <x>200</x>
@@ -72,7 +72,7 @@
     </rect>
    </property>
   </widget>
-  <widget class="QLabel" name="supplier_label">
+  <widget class="QLabel" name="receive_at_label">
    <property name="geometry">
     <rect>
      <x>90</x>
@@ -82,37 +82,14 @@
     </rect>
    </property>
    <property name="text">
-    <string>Supplier</string>
+    <string>Receive At</string>
    </property>
   </widget>
-  <widget class="QLineEdit" name="supplier_edit">
+  <widget class="QDateEdit" name="receive_at_edit">
    <property name="geometry">
     <rect>
      <x>200</x>
      <y>400</y>
-     <width>200</width>
-     <height>22</height>
-    </rect>
-   </property>
-  </widget>
-  <widget class="QLabel" name="inbound_date_label">
-   <property name="geometry">
-    <rect>
-     <x>90</x>
-     <y>450</y>
-     <width>80</width>
-     <height>22</height>
-    </rect>
-   </property>
-   <property name="text">
-    <string>Inbound Date</string>
-   </property>
-  </widget>
-  <widget class="QDateEdit" name="inbound_date_edit">
-   <property name="geometry">
-    <rect>
-     <x>200</x>
-     <y>450</y>
      <width>200</width>
      <height>22</height>
     </rect>
