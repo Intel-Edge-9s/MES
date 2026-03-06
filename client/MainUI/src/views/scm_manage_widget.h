@@ -20,8 +20,8 @@ public:
 
 private slots:
     void on_Back_btn_clicked();
-    void on_create_order_button_clicked();
     void on_cancel_order_button_clicked();
+    void on_pushButton_clicked();
 
 private:
     Ui::ScmManageWidget *ui;
