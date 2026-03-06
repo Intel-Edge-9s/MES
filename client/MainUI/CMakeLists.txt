@@ -22,6 +22,7 @@ if(${QT_VERSION_MAJOR} GREATER_EQUAL 6)
         # Core
         src/core/database_manager.h
         src/core/database_manager.cpp
+        src/core/user_session.h
 
         # Services
         src/services/auth_service.h

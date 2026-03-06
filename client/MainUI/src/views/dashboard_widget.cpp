@@ -1,5 +1,6 @@
 ﻿#include "dashboard_widget.h"
 #include "ui_dashboard_widget.h"
+#include "../core/user_session.h"
 
 #include <QDebug>
 #include <QLayoutItem>
@@ -18,6 +19,14 @@ DashboardWidget::~DashboardWidget() {
 void DashboardWidget::showEvent(QShowEvent *event)
 {
     QWidget::showEvent(event);
+
+    QString name = UserSession::instance().userName();
+    if (!name.isEmpty()) {
+        ui->userName->setText(name + "님 환영합니다.");
+    } else {
+        ui->userName->setText("로그인 정보 없음");
+    }
+
 
     initStorageCharts();
     initProductionChart();

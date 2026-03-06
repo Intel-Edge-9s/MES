@@ -5,6 +5,7 @@
 #include "dashboard_widget.h"
 #include "partner_manage_widget.h"
 #include <QDebug>
+#include <QFile>
 
 MainWindow::MainWindow(QWidget *parent)
     : QMainWindow(parent), ui(new Ui::MainWindow) {
@@ -28,13 +29,25 @@ MainWindow::MainWindow(QWidget *parent)
         connect(login, &LoginWidget::loginSuccess, this, [this](){
             startOpcUaOnce();
         });
-        connect(ua, &OpcUaService::mfgTempUpdated, this, [](double t){
-            qDebug() << "MFG TEMP =" << t;
+        connect(ua, &OpcUaService::mfgTempUpdated, this, [](double temp){
+            qDebug() << "MFG TEMP =" << temp;
+        });
+        connect(ua, &OpcUaService::mfgHumUpdated, this, [](double hum){
+            qDebug() << "MFG HUM =" << hum;
         });
 
-        connect(ua, &OpcUaService::logTempUpdated, this, [](double t){
-            qDebug() << "LOG TEMP =" << t;
+        connect(ua, &OpcUaService::mfgSpeedUpdated, this, [](double speed){
+            qDebug() << "MFG SPEED =" << speed;
         });
+
+        connect(ua, &OpcUaService::mfgProdCountUpdated, this, [](quint64 v){
+            qDebug() << "MFG PRODCOUNT =" << v;
+        });
+
+
+        // connect(ua, &OpcUaService::logTempUpdated, this, [](double t){
+        //     qDebug() << "LOG TEMP =" << t;
+        // });
 
     }
 
@@ -53,23 +66,24 @@ MainWindow::~MainWindow() {
 //===========================================
 void MainWindow::startOpcUaOnce()
 {
+    qDebug() << QFile::exists("/home/pi/MES/servers/certs/mfg/cert.der");
     if (uaStarted) return;
     uaStarted = true;
 
     ua->connectMfg(
         "opc.tcp://10.10.16.208:4850",
         "mes","mespw_change_me",
-        "/home/pi/opcua_project/certs/mes/cert.der",
-        "/home/pi/opcua_project/certs/mes/key.der",
-        "/home/pi/opcua_project/certs/mes/trust_mfg.der"
+        "/home/pi/MES/servers/certs/mes/cert.der",
+        "/home/pi/MES/servers/certs/mes/key.der",
+        "/home/pi/MES/servers/certs/mes/trust_mfg.der"
         );
 
     ua->connectLog(
         "opc.tcp://10.10.16.210:4841",
         "mes","mespw_change_me",
-        "/home/pi/opcua_project/certs/mes/cert.der",
-        "/home/pi/opcua_project/certs/mes/key.der",
-        "/home/pi/opcua_project/certs/mes/trust_log.der"
+        "/home/pi/MES/servers/certs/mes/cert.der",
+        "/home/pi/MES/servers/certs/mes/key.der",
+        "/home/pi/MES/servers/certs/mes/trust_log.der"
         );
 
 
