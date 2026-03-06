@@ -1,9 +1,13 @@
 ﻿#include "dashboard_widget.h"
 #include "ui_dashboard_widget.h"
 #include "../core/user_session.h"
+#include "../services/dashboard_service.h"
 
 #include <QDebug>
+#include <QObject>
 #include <QLayoutItem>
+#include <QLegendMarker>
+#include <QGraphicsLayout>
 
 DashboardWidget::DashboardWidget(QWidget *parent)
     : BasePageWidget(parent),
@@ -55,75 +59,93 @@ void DashboardWidget::clearLayout(QLayout *layout)
 
 void DashboardWidget::initStorageCharts()
 {
-    if (!ui->storageA01ChartLayout ||
-        !ui->storageB02ChartLayout ||
-        !ui->storageC03ChartLayout) {
-
+    if (!ui->storageA01ChartLayout || !ui->storageB02ChartLayout || !ui->storageC03ChartLayout) {
         qCritical() << "Storage chart layouts are null";
         return;
     }
+
+    auto chartDatas = DashboardService::getStorageCharts();
+    auto locations  = DashboardService::getLocations();
+    int totalSize = 200; 
 
     clearLayout(ui->storageA01ChartLayout);
     clearLayout(ui->storageB02ChartLayout);
     clearLayout(ui->storageC03ChartLayout);
 
+    for (const auto &loc : locations) {
+        QPieSeries *series = new QPieSeries();
+        int sumStock = 0;
+        QStringList itemCodeList; // 범례 텍스트를 순서대로 담아둘 리스트
 
-    /* ---------- 창고 A01 ---------- */
+        for (const auto &data : chartDatas) {
+            if (data.location == loc.location) {
+                // 1. 슬라이스 추가 (범례에 표시될 데이터 연결)
+                QPieSlice *slice = series->append(data.item_code, data.current_stock);
+                
+                // 2. [수정] 그래프 위 레이블은 숫자만 표시
+                slice->setLabel(QString::number(data.current_stock)); 
+                slice->setLabelVisible(true);
+                slice->setLabelPosition(QPieSlice::LabelInsideHorizontal);
+                
+                // 범례용 품목코드 저장
+                itemCodeList << data.item_code;
 
-    QPieSeries *seriesA = new QPieSeries();
-    seriesA->append("A-0 제품", 10);
-    seriesA->append("A-1 제품", 60);
-    seriesA->append("여유 공간", 30);
+                // 마우스 호버 시 효과: 품목코드와 숫자를 동시에 보여줌
+                QObject::connect(slice, &QPieSlice::hovered, this, [slice, data](bool hovered) {
+                    slice->setExploded(hovered);
+                    if (hovered) {
+                        slice->setLabel(QString("%1 (%2)").arg(data.item_code).arg(data.current_stock));
+                    } else {
+                        slice->setLabel(QString::number(data.current_stock));
+                    }
+                });
 
-    QChart *chartA = new QChart();
-    chartA->addSeries(seriesA);
-    chartA->setTitle("Storage A01");
+                sumStock += data.current_stock;
+            }
+        }
 
-    QChartView *viewA = new QChartView(chartA);
-    viewA->setRenderHint(QPainter::Antialiasing);
+        // 여유 공간 처리
+        int remain = totalSize - sumStock;
+        if (remain < 0) remain = 0;
+        QPieSlice *remainSlice = series->append("여유 공간", remain);
+        remainSlice->setLabel(remain > 0 ? "여유" : "");
+        remainSlice->setLabelVisible(remain > 0);
+        remainSlice->setBrush(QColor(80, 80, 80)); 
+        itemCodeList << "여유 공간";
 
-    ui->storageA01ChartLayout->addWidget(viewA);
+        /* ---------- 차트 생성 및 범례 강제 설정 ---------- */
+        QChart *chart = new QChart();
+        chart->addSeries(series);
+        chart->setTitle(loc.location);
+        series->setPieSize(0.7);
 
+        chart->legend()->setAlignment(Qt::AlignBottom);
+        chart->legend()->setVisible(true);
 
+        // [핵심] 차트가 그려진 후 마커의 텍스트를 item_code로 강제 고정
+        // markers() 함수는 차트가 생성된 직후에 호출해야 합니다.
+        const auto markers = chart->legend()->markers(series);
+        for (int i = 0; i < markers.count(); ++i) {
+            if (i < itemCodeList.size()) {
+                markers.at(i)->setLabel(itemCodeList.at(i)); 
+            }
+        }
 
-    /* ---------- 창고 B02 ---------- */
+        QFont legendFont = chart->legend()->font();
+        legendFont.setPointSize(8);
+        chart->legend()->setFont(legendFont);
 
-    QPieSeries *seriesB = new QPieSeries();
-    seriesB->append("B-0 제품", 70);
-    seriesB->append("여유 공간", 30);
+        chart->setMargins(QMargins(0, 0, 0, 0));
+        if (chart->layout()) chart->layout()->setContentsMargins(0, 0, 0, 0);
 
-    QChart *chartB = new QChart();
-    chartB->addSeries(seriesB);
-    chartB->setTitle("Storage B02");
+        QChartView *view = new QChartView(chart);
+        view->setRenderHint(QPainter::Antialiasing);
 
-    QChartView *viewB = new QChartView(chartB);
-    viewB->setRenderHint(QPainter::Antialiasing);
-
-    ui->storageB02ChartLayout->addWidget(viewB);
-
-
-
-    /* ---------- 창고 C03 ---------- */
-
-    QPieSeries *seriesC = new QPieSeries();
-    seriesC->append("C-0 제품", 55);
-    seriesC->append("여유 공간", 45);
-
-    QChart *chartC = new QChart();
-    chartC->addSeries(seriesC);
-    chartC->setTitle("Storage C03");
-
-    QChartView *viewC = new QChartView(chartC);
-    viewC->setRenderHint(QPainter::Antialiasing);
-
-    ui->storageC03ChartLayout->addWidget(viewC);
-
-
-    qDebug() << "Storage charts created";
+        if (loc.location == "WH-A01") ui->storageA01ChartLayout->addWidget(view);
+        else if (loc.location == "WH-B02") ui->storageB02ChartLayout->addWidget(view);
+        else if (loc.location == "WH-C03") ui->storageC03ChartLayout->addWidget(view);
+    }
 }
-
-
-
 
 
 

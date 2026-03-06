@@ -1,7 +1,4 @@
-﻿#ifndef INVENTORY_MODEL_H
-#define INVENTORY_MODEL_H
-
-#pragma once
+﻿#pragma once
 #include <QString>
 
 struct InventoryInfo {
@@ -16,4 +13,6 @@ struct InventoryInfo {
     QString location;
 };
 
-#endif // INVENTORY_MODEL_H
+struct LocationInfo {
+    QString location;
+};
