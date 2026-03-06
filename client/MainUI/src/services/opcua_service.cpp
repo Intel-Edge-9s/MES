@@ -2,15 +2,22 @@
 
 #include <QMetaObject>
 #include <QFile>
+#include <QDebug>
+#include <utility>
 
 static UA_ByteString loadFileBytes(const QString &path) {
     UA_ByteString bs = UA_BYTESTRING_NULL;
     QFile f(path);
     if(!f.open(QIODevice::ReadOnly)) return bs;
+
     QByteArray data = f.readAll();
     bs.length = (size_t)data.size();
     bs.data = (UA_Byte*)UA_malloc(bs.length);
-    if(!bs.data) { bs.length = 0; return bs; }
+    if(!bs.data) {
+        bs.length = 0;
+        return bs;
+    }
+
     memcpy(bs.data, data.constData(), bs.length);
     return bs;
 }
@@ -23,7 +30,7 @@ static QString sc(UA_StatusCode rc) {
 #endif
 }
 
-// ---------- NodeId helpers (server code 그대로 반영) ----------
+// ---------- NodeId helpers ----------
 static inline UA_NodeId nid(const char *s) { return UA_NODEID_STRING(1, (char*)s); }
 
 // MFG
@@ -86,10 +93,12 @@ public:
 public slots:
     void startLoop() {
         if(loopTimer) return;
+
         loopTimer = new QTimer(this);
         loopTimer->setInterval(30);
         connect(loopTimer, &QTimer::timeout, this, &Worker::iterate);
         loopTimer->start();
+
         emit info("OPC UA loop started");
     }
 
@@ -99,6 +108,7 @@ public slots:
             loopTimer->deleteLater();
             loopTimer = nullptr;
         }
+
         cleanup();
         emit info("OPC UA loop stopped");
     }
@@ -117,74 +127,108 @@ public slots:
 
     void disconnectAll() {
         QMutexLocker lk(&mu);
-        disconnectOne(mfg, true);
-        disconnectOne(log, false);
+        disconnectOneGraceful(mfg, true);
+        disconnectOneGraceful(log, false);
     }
 
     // ---- MFG API ----
     void mfgWriteSpeed(double pct) {
         QMutexLocker lk(&mu);
-        if(!mfg.client) { emit errorOccurred("mfgWriteSpeed", "MFG not connected"); return; }
+        if(!mfg.client || !mfg.connected) {
+            emit errorOccurred("mfgWriteSpeed", "MFG not connected");
+            return;
+        }
+
         double v = clampPct(pct);
-        UA_Variant var; UA_Variant_setScalar(&var, &v, &UA_TYPES[UA_TYPES_DOUBLE]);
+        UA_Variant var;
+        UA_Variant_setScalar(&var, &v, &UA_TYPES[UA_TYPES_DOUBLE]);
+
         UA_StatusCode rc = UA_Client_writeValueAttribute(mfg.client, nid(MFG_SPEED), &var);
-        if(rc != UA_STATUSCODE_GOOD) emit errorOccurred("mfgWriteSpeed", "write failed: " + sc(rc));
+        if(rc != UA_STATUSCODE_GOOD)
+            emit errorOccurred("mfgWriteSpeed", "write failed: " + sc(rc));
     }
 
     void mfgStartOrder(QString orderId) {
         QMutexLocker lk(&mu);
-        if(!mfg.client) { emit errorOccurred("mfgStartOrder", "MFG not connected"); return; }
+        if(!mfg.client || !mfg.connected) {
+            emit errorOccurred("mfgStartOrder", "MFG not connected");
+            return;
+        }
 
         QByteArray ba = orderId.toUtf8();
-        UA_String s; s.length = (size_t)ba.size(); s.data = (UA_Byte*)ba.data();
+        UA_String s;
+        s.length = (size_t)ba.size();
+        s.data = (UA_Byte*)ba.data();
 
-        UA_Variant in; UA_Variant_init(&in);
+        UA_Variant in;
+        UA_Variant_init(&in);
         UA_Variant_setScalar(&in, &s, &UA_TYPES[UA_TYPES_STRING]);
 
-        UA_Variant out; UA_Variant_init(&out);
         UA_StatusCode rc = UA_Client_call(mfg.client,
                                           UA_NODEID_NUMERIC(0, UA_NS0ID_OBJECTSFOLDER),
                                           nid(MFG_STARTORDER_M),
                                           1, &in,
                                           0, nullptr);
-        if(rc != UA_STATUSCODE_GOOD) emit errorOccurred("mfgStartOrder", "call failed: " + sc(rc));
+        if(rc != UA_STATUSCODE_GOOD)
+            emit errorOccurred("mfgStartOrder", "call failed: " + sc(rc));
     }
 
     void mfgStopOrder() {
         QMutexLocker lk(&mu);
-        if(!mfg.client) { emit errorOccurred("mfgStopOrder", "MFG not connected"); return; }
+        if(!mfg.client || !mfg.connected) {
+            emit errorOccurred("mfgStopOrder", "MFG not connected");
+            return;
+        }
 
         UA_StatusCode rc = UA_Client_call(mfg.client,
                                           UA_NODEID_NUMERIC(0, UA_NS0ID_OBJECTSFOLDER),
                                           nid(MFG_STOPORDER_M),
                                           0, nullptr,
                                           0, nullptr);
-        if(rc != UA_STATUSCODE_GOOD) emit errorOccurred("mfgStopOrder", "call failed: " + sc(rc));
+        if(rc != UA_STATUSCODE_GOOD)
+            emit errorOccurred("mfgStopOrder", "call failed: " + sc(rc));
     }
 
     // ---- LOG API ----
     void logWriteSpeed(int idx1to3, double pct) {
         QMutexLocker lk(&mu);
-        if(!log.client) { emit errorOccurred("logWriteSpeed", "LOG not connected"); return; }
-        if(idx1to3 < 1 || idx1to3 > 3) { emit errorOccurred("logWriteSpeed", "idx out of range"); return; }
+        if(!log.client || !log.connected) {
+            emit errorOccurred("logWriteSpeed", "LOG not connected");
+            return;
+        }
+        if(idx1to3 < 1 || idx1to3 > 3) {
+            emit errorOccurred("logWriteSpeed", "idx out of range");
+            return;
+        }
 
         const char *node = (idx1to3==1)?LOG_SPEED1:(idx1to3==2)?LOG_SPEED2:LOG_SPEED3;
         double v = clampPct(pct);
-        UA_Variant var; UA_Variant_setScalar(&var, &v, &UA_TYPES[UA_TYPES_DOUBLE]);
+
+        UA_Variant var;
+        UA_Variant_setScalar(&var, &v, &UA_TYPES[UA_TYPES_DOUBLE]);
+
         UA_StatusCode rc = UA_Client_writeValueAttribute(log.client, nid(node), &var);
-        if(rc != UA_STATUSCODE_GOOD) emit errorOccurred("logWriteSpeed", "write failed: " + sc(rc));
+        if(rc != UA_STATUSCODE_GOOD)
+            emit errorOccurred("logWriteSpeed", "write failed: " + sc(rc));
     }
 
     void logMove(int wh1to3, quint32 qty) {
         QMutexLocker lk(&mu);
-        if(!log.client) { emit errorOccurred("logMove", "LOG not connected"); return; }
-        if(wh1to3 < 1 || wh1to3 > 3) { emit errorOccurred("logMove", "wh out of range"); return; }
+        if(!log.client || !log.connected) {
+            emit errorOccurred("logMove", "LOG not connected");
+            return;
+        }
+        if(wh1to3 < 1 || wh1to3 > 3) {
+            emit errorOccurred("logMove", "wh out of range");
+            return;
+        }
 
         UA_UInt16 wh = (UA_UInt16)wh1to3;
-        UA_UInt32 q = (UA_UInt32)qty;
+        UA_UInt32 q  = (UA_UInt32)qty;
 
         UA_Variant in[2];
-        UA_Variant_init(&in[0]); UA_Variant_init(&in[1]);
+        UA_Variant_init(&in[0]);
+        UA_Variant_init(&in[1]);
         UA_Variant_setScalar(&in[0], &wh, &UA_TYPES[UA_TYPES_UINT16]);
         UA_Variant_setScalar(&in[1], &q,  &UA_TYPES[UA_TYPES_UINT32]);
 
@@ -193,31 +237,43 @@ public slots:
                                           nid(LOG_MOVE_M),
                                           2, in,
                                           0, nullptr);
-        if(rc != UA_STATUSCODE_GOOD) emit errorOccurred("logMove", "call failed: " + sc(rc));
+        if(rc != UA_STATUSCODE_GOOD)
+            emit errorOccurred("logMove", "call failed: " + sc(rc));
     }
 
     void logStopMove() {
         QMutexLocker lk(&mu);
-        if(!log.client) { emit errorOccurred("logStopMove", "LOG not connected"); return; }
+        if(!log.client || !log.connected) {
+            emit errorOccurred("logStopMove", "LOG not connected");
+            return;
+        }
 
         UA_StatusCode rc = UA_Client_call(log.client,
                                           UA_NODEID_NUMERIC(0, UA_NS0ID_OBJECTSFOLDER),
                                           nid(LOG_STOPMOVE_M),
                                           0, nullptr,
                                           0, nullptr);
-        if(rc != UA_STATUSCODE_GOOD) emit errorOccurred("logStopMove", "call failed: " + sc(rc));
+        if(rc != UA_STATUSCODE_GOOD)
+            emit errorOccurred("logStopMove", "call failed: " + sc(rc));
     }
 
     void logConsume(int wh1to3, quint32 qty) {
         QMutexLocker lk(&mu);
-        if(!log.client) { emit errorOccurred("logConsume", "LOG not connected"); return; }
-        if(wh1to3 < 1 || wh1to3 > 3) { emit errorOccurred("logConsume", "wh out of range"); return; }
+        if(!log.client || !log.connected) {
+            emit errorOccurred("logConsume", "LOG not connected");
+            return;
+        }
+        if(wh1to3 < 1 || wh1to3 > 3) {
+            emit errorOccurred("logConsume", "wh out of range");
+            return;
+        }
 
         UA_UInt16 wh = (UA_UInt16)wh1to3;
-        UA_UInt32 q = (UA_UInt32)qty;
+        UA_UInt32 q  = (UA_UInt32)qty;
 
         UA_Variant in[2];
-        UA_Variant_init(&in[0]); UA_Variant_init(&in[1]);
+        UA_Variant_init(&in[0]);
+        UA_Variant_init(&in[1]);
         UA_Variant_setScalar(&in[0], &wh, &UA_TYPES[UA_TYPES_UINT16]);
         UA_Variant_setScalar(&in[1], &q,  &UA_TYPES[UA_TYPES_UINT32]);
 
@@ -226,8 +282,13 @@ public slots:
                                           nid(LOG_CONSUME_M),
                                           2, in,
                                           0, nullptr);
-        if(rc != UA_STATUSCODE_GOOD) emit errorOccurred("logConsume", "call failed: " + sc(rc));
+        if(rc != UA_STATUSCODE_GOOD)
+            emit errorOccurred("logConsume", "call failed: " + sc(rc));
     }
+
+private slots:
+    void finalizeDropMfg() { finalizeDrop(mfg, true); }
+    void finalizeDropLog() { finalizeDrop(log, false); }
 
 signals:
     void mfgConnectedChanged(bool connected);
@@ -262,10 +323,24 @@ private:
         UA_UInt32 subId = 0;
         QString endpoint;
 
-        // ✅ handshake 동안 살아있어야 함
         UA_ByteString clientCert = UA_BYTESTRING_NULL;
         UA_ByteString clientKey  = UA_BYTESTRING_NULL;
         UA_ByteString trustSrv   = UA_BYTESTRING_NULL;
+
+        bool pendingDrop = false;
+        bool connected = false;
+
+        QList<MonTag*> tags;
+    };
+
+    struct QuarantinedConn {
+        UA_Client *client = nullptr;
+
+        UA_ByteString clientCert = UA_BYTESTRING_NULL;
+        UA_ByteString clientKey  = UA_BYTESTRING_NULL;
+        UA_ByteString trustSrv   = UA_BYTESTRING_NULL;
+
+        QList<MonTag*> tags;
     };
 
     QTimer *loopTimer = nullptr;
@@ -273,13 +348,73 @@ private:
 
     Conn mfg;
     Conn log;
+    QList<QuarantinedConn> garbage;
 
-    QList<MonTag*> tagsToFree; // monContext에 할당한 tag들 정리
+    static void moveByteString(UA_ByteString &dst, UA_ByteString &src) {
+        dst = src;
+        src = UA_BYTESTRING_NULL;
+    }
+
+    static void clearTagList(QList<MonTag*> &tags) {
+        for(auto *t : tags) delete t;
+        tags.clear();
+    }
 
     static double clampPct(double v) {
         if(v < 0.0) return 0.0;
         if(v > 100.0) return 100.0;
         return v;
+    }
+
+    void quarantineConn(Conn &c, bool isMfg) {
+        if(!c.client && !c.connected && c.tags.isEmpty())
+            return;
+
+        QuarantinedConn q;
+        q.client = c.client;
+        c.client = nullptr;
+
+        moveByteString(q.clientCert, c.clientCert);
+        moveByteString(q.clientKey,  c.clientKey);
+        moveByteString(q.trustSrv,   c.trustSrv);
+
+        q.tags = std::move(c.tags);
+
+        c.subId = 0;
+        c.endpoint.clear();
+        c.pendingDrop = false;
+
+        bool wasConnected = c.connected;
+        c.connected = false;
+
+        garbage.push_back(std::move(q));
+
+        if(wasConnected) {
+            if(isMfg) emit mfgConnectedChanged(false);
+            else emit logConnectedChanged(false);
+        }
+    }
+    void quarantineFailedClient(UA_Client *client,
+                                UA_ByteString &clientCert,
+                                UA_ByteString &clientKey,
+                                UA_ByteString &trustSrv) {
+        QuarantinedConn q;
+        q.client = client;
+
+        moveByteString(q.clientCert, clientCert);
+        moveByteString(q.clientKey,  clientKey);
+        moveByteString(q.trustSrv,   trustSrv);
+
+        garbage.push_back(std::move(q));
+    }
+
+    void finalizeDrop(Conn &c, bool isMfg) {
+        QMutexLocker lk(&mu);
+
+        if(!c.pendingDrop)
+            return;
+
+        quarantineConn(c, isMfg);
     }
 
     // ---- subscription callback ----
@@ -367,31 +502,81 @@ private:
     }
 
     void iterate() {
-        QMutexLocker lk(&mu);
-        if(mfg.client) UA_Client_run_iterate(mfg.client, 0);
-        if(log.client) UA_Client_run_iterate(log.client, 0);
+        bool mfgLost = false;
+        bool logLost = false;
+        QString mfgErr, logErr;
+
+        {
+            QMutexLocker lk(&mu);
+
+            if(mfg.client && !mfg.pendingDrop) {
+                UA_StatusCode rc = UA_Client_run_iterate(mfg.client, 0);
+                if(rc != UA_STATUSCODE_GOOD) {
+                    mfgLost = true;
+                    mfgErr = sc(rc);
+                    mfg.pendingDrop = true;
+                }
+            }
+
+            if(log.client && !log.pendingDrop) {
+                UA_StatusCode rc = UA_Client_run_iterate(log.client, 0);
+                if(rc != UA_STATUSCODE_GOOD) {
+                    logLost = true;
+                    logErr = sc(rc);
+                    log.pendingDrop = true;
+                }
+            }
+        }
+
+        if(mfgLost) {
+            emit errorOccurred("MFG", "server disconnected: " + mfgErr);
+            QMetaObject::invokeMethod(this, "finalizeDropMfg", Qt::QueuedConnection);
+        }
+
+        if(logLost) {
+            emit errorOccurred("LOG", "server disconnected: " + logErr);
+            QMetaObject::invokeMethod(this, "finalizeDropLog", Qt::QueuedConnection);
+        }
     }
 
     void cleanup() {
-        for(auto *t : tagsToFree) delete t;
-        tagsToFree.clear();
+        disconnectOneGraceful(mfg, true);
+        disconnectOneGraceful(log, false);
 
-        disconnectOne(mfg, true);
-        disconnectOne(log, false);
+        for(auto &q : garbage) {
+            UA_ByteString_clear(&q.clientCert);
+            UA_ByteString_clear(&q.clientKey);
+            UA_ByteString_clear(&q.trustSrv);
+            clearTagList(q.tags);
+            q.client = nullptr;
+        }
+        garbage.clear();
     }
 
-    void disconnectOne(Conn &c, bool isMfg) {
-        if(!c.client) return;
-        UA_Client_disconnect(c.client);
-        UA_Client_delete(c.client);
+    void disconnectOneGraceful(Conn &c, bool isMfg) {
+        UA_Client *client = c.client;
         c.client = nullptr;
         c.subId = 0;
+        c.endpoint.clear();
+        c.pendingDrop = false;
+
+        bool wasConnected = c.connected;
+        c.connected = false;
+
+        if(client) {
+            UA_Client_disconnect(client);
+            UA_Client_delete(client);
+        }
 
         UA_ByteString_clear(&c.clientCert);
         UA_ByteString_clear(&c.clientKey);
         UA_ByteString_clear(&c.trustSrv);
-        if(isMfg) emit mfgConnectedChanged(false);
-        else emit logConnectedChanged(false);
+        clearTagList(c.tags);
+
+        if(wasConnected) {
+            if(isMfg) emit mfgConnectedChanged(false);
+            else emit logConnectedChanged(false);
+        }
     }
 
     void connectOne(Conn &c,
@@ -401,19 +586,26 @@ private:
                     const QString &clientKeyDer,
                     const QString &trustServerDer,
                     bool isMfg) {
-        // 기존 연결 제거 (여기서 기존 ByteString들도 clear됨)
-        disconnectOne(c, isMfg);
+        // 기존 연결 정리
+        disconnectOneGraceful(c, isMfg);
 
         UA_Client *client = UA_Client_new();
         if(!client) {
-            emit errorOccurred(isMfg?"connectMfg":"connectLog", "UA_Client_new failed");
+            emit errorOccurred(isMfg ? "connectMfg" : "connectLog", "UA_Client_new failed");
+            c.connected = false;
+            c.pendingDrop = false;
+            c.client = nullptr;
+            c.subId = 0;
+            c.endpoint.clear();
+            if(isMfg) emit mfgConnectedChanged(false);
+            else emit logConnectedChanged(false);
             return;
         }
 
         UA_ClientConfig *cfg = UA_Client_getConfig(client);
         UA_ClientConfig_setDefault(cfg);
 
-        // ✅ Conn에 보관 (핸드셰이크 동안 살아있게)
+        // 인증서/키/신뢰 서버 인증서 로드
         c.clientCert = loadFileBytes(clientCertDer);
         c.clientKey  = loadFileBytes(clientKeyDer);
         c.trustSrv   = loadFileBytes(trustServerDer);
@@ -424,11 +616,18 @@ private:
                       .arg((int)c.trustSrv.length));
 
         if(c.clientCert.length == 0 || c.clientKey.length == 0 || c.trustSrv.length == 0) {
-            emit errorOccurred(isMfg?"connectMfg":"connectLog", "cert/key/trust load failed");
-            UA_Client_delete(client);
-            UA_ByteString_clear(&c.clientCert);
-            UA_ByteString_clear(&c.clientKey);
-            UA_ByteString_clear(&c.trustSrv);
+            emit errorOccurred(isMfg ? "connectMfg" : "connectLog", "cert/key/trust load failed");
+
+            quarantineFailedClient(client, c.clientCert, c.clientKey, c.trustSrv);
+
+            c.connected = false;
+            c.pendingDrop = false;
+            c.client = nullptr;
+            c.subId = 0;
+            c.endpoint.clear();
+
+            if(isMfg) emit mfgConnectedChanged(false);
+            else emit logConnectedChanged(false);
             return;
         }
 
@@ -440,46 +639,65 @@ private:
             trustList, 1,
             NULL, 0
             );
-        // ★ 인증서 URI와 동일하게 맞춰야 서버가 CreateSession을 허용함
+
+        // 인증서 URI와 맞춰야 함
         cfg->clientDescription.applicationUri = UA_STRING_ALLOC("urn:opcua:mes");
+
         emit info(QString("setDefaultEncryption rc=%1").arg(sc(rcEnc)));
 
         if(rcEnc != UA_STATUSCODE_GOOD) {
-            emit errorOccurred(isMfg?"connectMfg":"connectLog",
+            emit errorOccurred(isMfg ? "connectMfg" : "connectLog",
                                "setDefaultEncryption failed: " + sc(rcEnc));
-            UA_Client_delete(client);
-            UA_ByteString_clear(&c.clientCert);
-            UA_ByteString_clear(&c.clientKey);
-            UA_ByteString_clear(&c.trustSrv);
+
+            quarantineFailedClient(client, c.clientCert, c.clientKey, c.trustSrv);
+
+            c.connected = false;
+            c.pendingDrop = false;
+            c.client = nullptr;
+            c.subId = 0;
+            c.endpoint.clear();
+
+            if(isMfg) emit mfgConnectedChanged(false);
+            else emit logConnectedChanged(false);
             return;
         }
 
-        // ✅ 서버 강제 모드/정책 (ALLOC/clear 금지)
+        // 서버 강제 보안 모드/정책
         cfg->securityMode = UA_MESSAGESECURITYMODE_SIGNANDENCRYPT;
         cfg->securityPolicyUri = UA_STRING("http://opcfoundation.org/UA/SecurityPolicy#Basic256Sha256");
 
-        // ✅ connect
+        // 실제 연결
         UA_StatusCode rc = UA_Client_connectUsername(
             client,
             endpoint.toUtf8().constData(),
             user.toUtf8().constData(),
             pass.toUtf8().constData()
             );
+
         emit info(QString("connectUsername rc=%1").arg(sc(rc)));
 
         if(rc != UA_STATUSCODE_GOOD) {
-            emit errorOccurred(isMfg?"connectMfg":"connectLog", "connect failed: " + sc(rc));
-            UA_Client_delete(client);
-            // 실패 시도 시 보관했던 것들 정리
-            UA_ByteString_clear(&c.clientCert);
-            UA_ByteString_clear(&c.clientKey);
-            UA_ByteString_clear(&c.trustSrv);
+            emit errorOccurred(isMfg ? "connectMfg" : "connectLog",
+                               "connect failed: " + sc(rc));
+
+            quarantineFailedClient(client, c.clientCert, c.clientKey, c.trustSrv);
+
+            c.connected = false;
+            c.pendingDrop = false;
+            c.client = nullptr;
+            c.subId = 0;
+            c.endpoint.clear();
+
+            if(isMfg) emit mfgConnectedChanged(false);
+            else emit logConnectedChanged(false);
             return;
         }
 
         // 연결 성공
         c.client = client;
         c.endpoint = endpoint;
+        c.pendingDrop = false;
+        c.connected = true;
 
         if(isMfg) emit mfgConnectedChanged(true);
         else emit logConnectedChanged(true);
@@ -489,6 +707,7 @@ private:
         setupSubscriptions(c, isMfg);
     }
 
+
     void setupSubscriptions(Conn &c, bool isMfg) {
         if(!c.client) return;
 
@@ -497,10 +716,11 @@ private:
             UA_Client_Subscriptions_create(c.client, req, this, nullptr, nullptr);
 
         if(resp.responseHeader.serviceResult != UA_STATUSCODE_GOOD) {
-            emit errorOccurred(isMfg?"subCreate(MFG)":"subCreate(LOG)",
+            emit errorOccurred(isMfg ? "subCreate(MFG)" : "subCreate(LOG)",
                                "create subscription failed: " + sc(resp.responseHeader.serviceResult));
             return;
         }
+
         c.subId = resp.subscriptionId;
 
         if(isMfg) {
@@ -544,7 +764,7 @@ private:
         if(!c.client || c.subId == 0) return;
 
         auto *tag = new MonTag{kind};
-        tagsToFree.push_back(tag);
+        c.tags.push_back(tag);
 
         UA_MonitoredItemCreateRequest monReq = UA_MonitoredItemCreateRequest_default(node);
         monReq.requestedParameters.samplingInterval = 200.0;
@@ -557,7 +777,8 @@ private:
                 monReq,
                 tag,
                 dataChangeCb,
-                nullptr);
+                nullptr
+                );
 
         if(monRes.statusCode != UA_STATUSCODE_GOOD) {
             emit errorOccurred("addMon", "create monitored item failed: " + sc(monRes.statusCode));
@@ -599,7 +820,9 @@ OpcUaService::OpcUaService(QObject *parent) : QObject(parent) {
     connect(&m_thread, &QThread::finished, m_worker, &QObject::deleteLater);
 }
 
-OpcUaService::~OpcUaService() { stop(); }
+OpcUaService::~OpcUaService() {
+    stop();
+}
 
 void OpcUaService::start() {
     if(m_thread.isRunning()) return;
@@ -649,11 +872,13 @@ void OpcUaService::mfgWriteSpeed(double speedPercent) {
     QMetaObject::invokeMethod(m_worker, "mfgWriteSpeed", Qt::QueuedConnection,
                               Q_ARG(double, speedPercent));
 }
+
 void OpcUaService::mfgStartOrder(const QString &orderId) {
     start();
     QMetaObject::invokeMethod(m_worker, "mfgStartOrder", Qt::QueuedConnection,
                               Q_ARG(QString, orderId));
 }
+
 void OpcUaService::mfgStopOrder() {
     start();
     QMetaObject::invokeMethod(m_worker, "mfgStopOrder", Qt::QueuedConnection);
@@ -666,16 +891,19 @@ void OpcUaService::logWriteSpeed(int idx1to3, double speedPercent) {
                               Q_ARG(int, idx1to3),
                               Q_ARG(double, speedPercent));
 }
+
 void OpcUaService::logMove(int wh1to3, quint32 qty) {
     start();
     QMetaObject::invokeMethod(m_worker, "logMove", Qt::QueuedConnection,
                               Q_ARG(int, wh1to3),
                               Q_ARG(quint32, qty));
 }
+
 void OpcUaService::logStopMove() {
     start();
     QMetaObject::invokeMethod(m_worker, "logStopMove", Qt::QueuedConnection);
 }
+
 void OpcUaService::logConsume(int wh1to3, quint32 qty) {
     start();
     QMetaObject::invokeMethod(m_worker, "logConsume", Qt::QueuedConnection,
