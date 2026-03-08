@@ -30,12 +30,14 @@
 #include <string.h>
 #include <stdlib.h>
 #include <dirent.h>
+#include <pthread.h>
 #include <errno.h>
 
 #include <open62541/server.h>
 #include <open62541/server_config_default.h>
 #include <open62541/plugin/accesscontrol_default.h>
-
+//서버 리퀘스트 대기시간
+static time_t g_auth_start_time = 0;
 /* ----------------- graceful shutdown ----------------- */
 static volatile sig_atomic_t g_running = 1;
 static void on_sigint(int sig) { (void)sig; g_running = 0; }
@@ -76,7 +78,32 @@ static UA_ByteString loadFile(const char *path) {
     }
     return bs;
 }
+static void write_bool_node(UA_Server *server, UA_NodeId id, UA_Boolean b) {
+    UA_Variant v;
+    UA_Variant_setScalar(&v, &b, &UA_TYPES[UA_TYPES_BOOLEAN]);
+    (void)UA_Server_writeValue(server, id, v);
+}
 
+static void write_string_node(UA_Server *server, UA_NodeId id, const char *s) {
+    UA_String us = UA_STRING((char*)s);
+    UA_Variant v;
+    UA_Variant_setScalar(&v, &us, &UA_TYPES[UA_TYPES_STRING]);
+    (void)UA_Server_writeValue(server, id, v);
+}
+
+static UA_Boolean read_bool_node(UA_Server *server, UA_NodeId id, UA_Boolean defVal) {
+    UA_Boolean out = defVal;
+    UA_Variant v;
+    UA_Variant_init(&v);
+
+    if(UA_Server_readValue(server, id, &v) == UA_STATUSCODE_GOOD &&
+       UA_Variant_hasScalarType(&v, &UA_TYPES[UA_TYPES_BOOLEAN])) {
+        out = *(UA_Boolean*)v.data;
+    }
+
+    UA_Variant_clear(&v);
+    return out;
+}
 /* ----------------- security helpers ----------------- */
 static UA_String* findPolicyUri(UA_ServerConfig *cfg, const char *uri) {
     if(!cfg || !cfg->securityPolicies || cfg->securityPoliciesSize == 0)
@@ -186,6 +213,30 @@ static UA_NodeId WH_LOADED_ID[3];
 static UA_NodeId WH_QTY_ID[3];
 static UA_NodeId WH_LOWSTOCK_ID[3];
 
+static UA_NodeId AUTH_REQ_ID_ID;
+static UA_NodeId AUTH_REQ_PW_ID;
+static UA_NodeId AUTH_REQ_PENDING_ID;
+static UA_NodeId AUTH_RESULT_OK_ID;
+static UA_NodeId AUTH_RESULT_DONE_ID;
+
+static UA_Boolean g_auth_ok = false;
+static UA_Boolean g_auth_request_sent = false;
+static UA_Boolean g_auth_input_ready = false;
+
+static pthread_t g_auth_thread;
+static pthread_mutex_t g_auth_mu = PTHREAD_MUTEX_INITIALIZER;
+
+static char g_auth_input_id[64] = {0};
+static char g_auth_input_pw[64] = {0};
+
+static UA_NodeId ARRIVAL_ORDER_ID_ID;
+static UA_NodeId ARRIVAL_PENDING_ID;
+static UA_NodeId ARRIVAL_DONE_ID;
+static UA_NodeId ARRIVAL_OK_ID;
+static UA_NodeId ARRIVAL_MSG_ID;
+
+static UA_Server *g_server = NULL;
+
 /* ----------------- Warehouse runtime state ----------------- */
 static UA_UInt32 g_wh_qty[3] = {0,0,0};       /* current loaded */
 static UA_UInt32 g_wh_target[3] = {0,0,0};    /* target loaded count (absolute) */
@@ -279,6 +330,81 @@ static void load_step_cb(UA_Server *server, void *data) {
     g_step_cb_id[idx] = 0;
     UA_free(ctx);
 }
+/*================logistics helper==========*/
+static UA_StatusCode start_move_job(UA_Server *server, UA_UInt16 wh, UA_UInt32 qty) {
+    if(wh < 1 || wh > 3)
+        return UA_STATUSCODE_BADOUTOFRANGE;
+
+    int idx = (int)wh - 1;
+
+    printf("[LOG] start_move_job wh=%u qty=%u\n", (unsigned)wh, (unsigned)qty);
+
+    g_job_seq[idx]++;
+
+    if(g_step_cb_id[idx] != 0) {
+        UA_Server_removeRepeatedCallback(server, g_step_cb_id[idx]);
+        g_step_cb_id[idx] = 0;
+    }
+
+    {
+        UA_String moving = UA_STRING("Moving");
+        UA_Variant vS;
+        UA_Variant_setScalar(&vS, &moving, &UA_TYPES[UA_TYPES_STRING]);
+        (void)UA_Server_writeValue(server, STATUS_ID, vS);
+    }
+
+    {
+        UA_Boolean low = false;
+        UA_Variant v;
+        UA_Variant_setScalar(&v, &low, &UA_TYPES[UA_TYPES_BOOLEAN]);
+        (void)UA_Server_writeValue(server, WH_LOWSTOCK_ID[idx], v);
+    }
+
+    set_wh_flags(server, idx, true, false);
+
+    /* 이번 단계는 속도 100% 고정 */
+    {
+        double spd = 100.0;
+        UA_Variant vSpd;
+        UA_Variant_setScalar(&vSpd, &spd, &UA_TYPES[UA_TYPES_DOUBLE]);
+        (void)UA_Server_writeValue(server, SPEED_ID[idx], vSpd);
+    }
+
+    double spd = 100.0;
+    UA_UInt32 total_ms = calc_total_ms(spd, qty);
+    if(total_ms == 0 || qty == 0) {
+        set_wh_flags(server, idx, false, false);
+        return UA_STATUSCODE_BADINVALIDSTATE;
+    }
+
+    g_wh_target[idx] = g_wh_qty[idx] + qty;
+
+    UA_UInt32 step_ms = total_ms / qty;
+    if(step_ms < 50) step_ms = 50;
+
+    step_ctx_t *ctx = (step_ctx_t*)UA_malloc(sizeof(*ctx));
+    if(!ctx) return UA_STATUSCODE_BADOUTOFMEMORY;
+
+    ctx->idx = idx;
+    ctx->seq = g_job_seq[idx];
+    ctx->cb_id = 0;
+
+    UA_UInt64 cbId = 0;
+    UA_StatusCode rc = UA_Server_addRepeatedCallback(server, load_step_cb, ctx, step_ms, &cbId);
+    if(rc != UA_STATUSCODE_GOOD) {
+        UA_free(ctx);
+        return rc;
+    }
+
+    ctx->cb_id = cbId;
+    g_step_cb_id[idx] = cbId;
+
+    printf("[LOG] WH%d loading start: qty=%u total=%ums step=%ums target=%u\n",
+           idx+1, (unsigned)qty, (unsigned)total_ms, (unsigned)step_ms, (unsigned)g_wh_target[idx]);
+    fflush(stdout);
+
+    return UA_STATUSCODE_GOOD;
+}
 
 /* ----------------- Methods ----------------- */
 static UA_StatusCode
@@ -291,6 +417,9 @@ Move_cb(UA_Server *server,
     (void)sessionId; (void)sessionContext; (void)methodId; (void)methodContext;
     (void)objectId; (void)objectContext; (void)outputSize; (void)output;
 
+    if(!g_auth_ok)
+        return UA_STATUSCODE_BADUSERACCESSDENIED;
+
     if(inputSize != 2 ||
        !UA_Variant_hasScalarType(&input[0], &UA_TYPES[UA_TYPES_UINT16]) ||
        !UA_Variant_hasScalarType(&input[1], &UA_TYPES[UA_TYPES_UINT32]))
@@ -298,78 +427,8 @@ Move_cb(UA_Server *server,
 
     UA_UInt16 wh = *(UA_UInt16*)input[0].data;
     UA_UInt32 qty = *(UA_UInt32*)input[1].data;
-    UA_UInt32 req_qty = qty;
-    UA_UInt32 stock_after = 0;
 
-    if(wh < 1 || wh > 3)
-        return UA_STATUSCODE_BADOUTOFRANGE;
-
-    int idx = (int)wh - 1;
-
-    printf("[LOG] Move called wh=%u qty=%u\n", (unsigned)wh, (unsigned)qty);
-
-    /* cancel existing job */
-    g_job_seq[idx]++;
-
-    if(g_step_cb_id[idx] != 0) {
-        UA_Server_removeRepeatedCallback(server, g_step_cb_id[idx]);
-        g_step_cb_id[idx] = 0;
-    }
-
-    /* status -> Moving */
-    {
-        UA_String moving = UA_STRING("Moving");
-        UA_Variant vS;
-        UA_Variant_setScalar(&vS, &moving, &UA_TYPES[UA_TYPES_STRING]);
-        (void)UA_Server_writeValue(server, STATUS_ID, vS);
-    }
-    /* Move 시작 시 low_stock 해제(입고 예정) */
-    {
-        UA_Boolean low = false;
-        UA_Variant v;
-        UA_Variant_setScalar(&v, &low, &UA_TYPES[UA_TYPES_BOOLEAN]);
-        (void)UA_Server_writeValue(server, WH_LOWSTOCK_ID[idx], v);
-    }
-    /* set loading flags */
-    set_wh_flags(server, idx, true, false);
-
-    /* compute timing */
-    double spd = read_speed_pct(server, idx);
-    UA_UInt32 total_ms = calc_total_ms(spd, qty);
-    if(total_ms == 0 || qty == 0) {
-        printf("[LOG] WH%d Move rejected (speed=%.1f%% or qty=0)\n", idx+1, spd);
-        set_wh_flags(server, idx, false, false);
-        return UA_STATUSCODE_BADINVALIDSTATE;   /* Busy/InvalidState 대용 */
-    }
-
-    g_wh_target[idx] = g_wh_qty[idx] + qty;
-
-    UA_UInt32 step_ms = total_ms / qty;
-    if(step_ms < 50) step_ms = 50; /* UI/CPU 보호 */
-
-    step_ctx_t *ctx = (step_ctx_t*)UA_malloc(sizeof(*ctx));
-    if(!ctx) return UA_STATUSCODE_BADOUTOFMEMORY;
-
-    ctx->idx = idx;
-    ctx->seq = g_job_seq[idx];
-    ctx->cb_id = 0;
-
-    UA_UInt64 cbId = 0;
-    UA_StatusCode rc2 = UA_Server_addRepeatedCallback(server, load_step_cb, ctx, step_ms, &cbId);
-    if(rc2 != UA_STATUSCODE_GOOD) {
-        UA_free(ctx);
-        printf("[LOG] addRepeatedCallback(step) failed: 0x%08x\n", (unsigned)rc2);
-        return rc2;
-    }
-
-    ctx->cb_id = cbId;
-    g_step_cb_id[idx] = cbId;
-
-    printf("[LOG] WH%d loading start: speed=%.1f%% qty=%u total=%ums step=%ums target=%u\n",
-           idx+1, spd, (unsigned)qty, (unsigned)total_ms, (unsigned)step_ms, (unsigned)g_wh_target[idx]);
-    fflush(stdout);
-
-    return UA_STATUSCODE_GOOD;
+    return start_move_job(server, wh, qty);
 }
 
 static UA_StatusCode
@@ -383,6 +442,9 @@ StopMove_cb(UA_Server *server,
     (void)sessionId; (void)sessionContext; (void)methodId; (void)methodContext;
     (void)objectId; (void)objectContext; (void)inputSize; (void)input;
     (void)outputSize; (void)output;
+
+    if(!g_auth_ok)
+    return UA_STATUSCODE_BADUSERACCESSDENIED;
 
     printf("[LOG] StopMove called\n");
 
@@ -413,6 +475,9 @@ Consume_cb(UA_Server *server,
     (void)methodId;(void)methodContext;
     (void)objectId;(void)objectContext;
     (void)outputSize;(void)output;
+
+    if(!g_auth_ok)
+    return UA_STATUSCODE_BADUSERACCESSDENIED;
 
     if(inputSize!=2)
         return UA_STATUSCODE_BADINVALIDARGUMENT;
@@ -556,6 +621,8 @@ static int read_dht11_iio(double *tempC, double *humPct) {
 
 static void log_dht_update_cb(UA_Server *server, void *data) {
     (void)data;
+    if(!g_auth_ok)
+    return;
     double t=0.0, h=0.0;
     if(read_dht11_iio(&t, &h) == 0) {
         UA_Variant vT, vH;
@@ -564,6 +631,69 @@ static void log_dht_update_cb(UA_Server *server, void *data) {
         (void)UA_Server_writeValue(server, LOG_TEMP_ID, vT);
         (void)UA_Server_writeValue(server, LOG_HUM_ID,  vH);
     }
+}
+
+static void *auth_input_thread_fn(void *arg) {
+    (void)arg;
+
+    char id[64] = {0};
+    char pw[64] = {0};
+
+    printf("=== LOG SERVER LOGIN ===\n");
+    printf("ID: ");
+    fflush(stdout);
+    if(scanf("%63s", id) != 1)
+        return NULL;
+
+    printf("PW: ");
+    fflush(stdout);
+    if(scanf("%63s", pw) != 1)
+        return NULL;
+
+    int c;
+    while((c = getchar()) != '\n' && c != EOF) {}
+
+    pthread_mutex_lock(&g_auth_mu);
+    snprintf(g_auth_input_id, sizeof(g_auth_input_id), "%s", id);
+    snprintf(g_auth_input_pw, sizeof(g_auth_input_pw), "%s", pw);
+    g_auth_input_ready = true;
+    pthread_mutex_unlock(&g_auth_mu);
+
+    while(g_running) {
+        char line[256] = {0};
+        char orderId[200] = {0};
+
+        printf("\ncmd> ");
+        fflush(stdout);
+
+        if(!fgets(line, sizeof(line), stdin))
+            break;
+
+        if(sscanf(line, "arrive %199s", orderId) == 1) {
+            if(!g_auth_ok) {
+                printf("[LOG] auth not completed yet\n");
+                continue;
+            }
+
+            write_string_node(g_server, ARRIVAL_ORDER_ID_ID, orderId);
+            write_string_node(g_server, ARRIVAL_MSG_ID, "");
+            write_bool_node(g_server, ARRIVAL_OK_ID, false);
+            write_bool_node(g_server, ARRIVAL_DONE_ID, false);
+            write_bool_node(g_server, ARRIVAL_PENDING_ID, true);
+
+            printf("[LOG] arrival requested: order_id=%s\n", orderId);
+            continue;
+        }
+
+        if(strncmp(line, "quit", 4) == 0) {
+            g_running = 0;
+            break;
+        }
+
+        printf("usage: arrive <order_id>\n");
+    }
+
+    return NULL;
 }
 
 /* ----------------- main ----------------- */
@@ -585,6 +715,7 @@ int main(void) {
     const UA_ByteString trustList[1] = { trustMes };
 
     UA_Server *server = UA_Server_new();
+    g_server = server;
     UA_ServerConfig *cfg = UA_Server_getConfig(server);
 
     UA_StatusCode rc = UA_ServerConfig_setDefaultWithSecurityPolicies(
@@ -635,6 +766,18 @@ int main(void) {
     WH_LOWSTOCK_ID[0] = UA_NODEID_STRING(1,"log/wh1/low_stock");
     WH_LOWSTOCK_ID[1] = UA_NODEID_STRING(1,"log/wh2/low_stock");
     WH_LOWSTOCK_ID[2] = UA_NODEID_STRING(1,"log/wh3/low_stock");
+
+    AUTH_REQ_ID_ID      = UA_NODEID_STRING(1, "log/auth/request_id");
+    AUTH_REQ_PW_ID      = UA_NODEID_STRING(1, "log/auth/request_pw");
+    AUTH_REQ_PENDING_ID = UA_NODEID_STRING(1, "log/auth/request_pending");
+    AUTH_RESULT_OK_ID   = UA_NODEID_STRING(1, "log/auth/result_ok");
+    AUTH_RESULT_DONE_ID = UA_NODEID_STRING(1, "log/auth/result_done");
+
+    ARRIVAL_ORDER_ID_ID = UA_NODEID_STRING(1, "log/arrival/order_id");
+    ARRIVAL_PENDING_ID  = UA_NODEID_STRING(1, "log/arrival/pending");
+    ARRIVAL_DONE_ID     = UA_NODEID_STRING(1, "log/arrival/done");
+    ARRIVAL_OK_ID       = UA_NODEID_STRING(1, "log/arrival/ok");
+    ARRIVAL_MSG_ID      = UA_NODEID_STRING(1, "log/arrival/msg");
 
     /* status */
     {
@@ -791,6 +934,186 @@ int main(void) {
             UA_NODEID_NUMERIC(0,UA_NS0ID_BASEDATAVARIABLETYPE),
             a4,NULL,NULL);
     }
+
+    /* auth request_id */
+    {
+        UA_VariableAttributes a = UA_VariableAttributes_default;
+        a.displayName = UA_LOCALIZEDTEXT("en-US", "LOG_AuthRequestId");
+        UA_String s = UA_STRING("");
+        UA_Variant_setScalar(&a.value, &s, &UA_TYPES[UA_TYPES_STRING]);
+        a.accessLevel = UA_ACCESSLEVELMASK_READ;
+        a.userAccessLevel = UA_ACCESSLEVELMASK_READ;
+
+        UA_Server_addVariableNode(server,
+            AUTH_REQ_ID_ID,
+            UA_NODEID_NUMERIC(0, UA_NS0ID_OBJECTSFOLDER),
+            UA_NODEID_NUMERIC(0, UA_NS0ID_ORGANIZES),
+            UA_QUALIFIEDNAME(1, "LOG_AuthRequestId"),
+            UA_NODEID_NUMERIC(0, UA_NS0ID_BASEDATAVARIABLETYPE),
+            a, NULL, NULL);
+    }
+
+    /* auth request_pw */
+    {
+        UA_VariableAttributes a = UA_VariableAttributes_default;
+        a.displayName = UA_LOCALIZEDTEXT("en-US", "LOG_AuthRequestPw");
+        UA_String s = UA_STRING("");
+        UA_Variant_setScalar(&a.value, &s, &UA_TYPES[UA_TYPES_STRING]);
+        a.accessLevel = UA_ACCESSLEVELMASK_READ;
+        a.userAccessLevel = UA_ACCESSLEVELMASK_READ;
+
+        UA_Server_addVariableNode(server,
+            AUTH_REQ_PW_ID,
+            UA_NODEID_NUMERIC(0, UA_NS0ID_OBJECTSFOLDER),
+            UA_NODEID_NUMERIC(0, UA_NS0ID_ORGANIZES),
+            UA_QUALIFIEDNAME(1, "LOG_AuthRequestPw"),
+            UA_NODEID_NUMERIC(0, UA_NS0ID_BASEDATAVARIABLETYPE),
+            a, NULL, NULL);
+    }
+
+    /* auth request_pending */
+    {
+        UA_VariableAttributes a = UA_VariableAttributes_default;
+        a.displayName = UA_LOCALIZEDTEXT("en-US", "LOG_AuthRequestPending");
+        UA_Boolean b = false;
+        UA_Variant_setScalar(&a.value, &b, &UA_TYPES[UA_TYPES_BOOLEAN]);
+        a.accessLevel = UA_ACCESSLEVELMASK_READ | UA_ACCESSLEVELMASK_WRITE;
+        a.userAccessLevel = UA_ACCESSLEVELMASK_READ | UA_ACCESSLEVELMASK_WRITE;
+
+        UA_Server_addVariableNode(server,
+            AUTH_REQ_PENDING_ID,
+            UA_NODEID_NUMERIC(0, UA_NS0ID_OBJECTSFOLDER),
+            UA_NODEID_NUMERIC(0, UA_NS0ID_ORGANIZES),
+            UA_QUALIFIEDNAME(1, "LOG_AuthRequestPending"),
+            UA_NODEID_NUMERIC(0, UA_NS0ID_BASEDATAVARIABLETYPE),
+            a, NULL, NULL);
+    }
+
+    /* auth result_ok */
+    {
+        UA_VariableAttributes a = UA_VariableAttributes_default;
+        a.displayName = UA_LOCALIZEDTEXT("en-US", "LOG_AuthResultOk");
+        UA_Boolean b = false;
+        UA_Variant_setScalar(&a.value, &b, &UA_TYPES[UA_TYPES_BOOLEAN]);
+        a.accessLevel = UA_ACCESSLEVELMASK_READ | UA_ACCESSLEVELMASK_WRITE;
+        a.userAccessLevel = UA_ACCESSLEVELMASK_READ | UA_ACCESSLEVELMASK_WRITE;
+
+        UA_Server_addVariableNode(server,
+            AUTH_RESULT_OK_ID,
+            UA_NODEID_NUMERIC(0, UA_NS0ID_OBJECTSFOLDER),
+            UA_NODEID_NUMERIC(0, UA_NS0ID_ORGANIZES),
+            UA_QUALIFIEDNAME(1, "LOG_AuthResultOk"),
+            UA_NODEID_NUMERIC(0, UA_NS0ID_BASEDATAVARIABLETYPE),
+            a, NULL, NULL);
+    }
+
+    /* auth result_done */
+    {
+        UA_VariableAttributes a = UA_VariableAttributes_default;
+        a.displayName = UA_LOCALIZEDTEXT("en-US", "LOG_AuthResultDone");
+        UA_Boolean b = false;
+        UA_Variant_setScalar(&a.value, &b, &UA_TYPES[UA_TYPES_BOOLEAN]);
+        a.accessLevel = UA_ACCESSLEVELMASK_READ | UA_ACCESSLEVELMASK_WRITE;
+        a.userAccessLevel = UA_ACCESSLEVELMASK_READ | UA_ACCESSLEVELMASK_WRITE;
+
+        UA_Server_addVariableNode(server,
+            AUTH_RESULT_DONE_ID,
+            UA_NODEID_NUMERIC(0, UA_NS0ID_OBJECTSFOLDER),
+            UA_NODEID_NUMERIC(0, UA_NS0ID_ORGANIZES),
+            UA_QUALIFIEDNAME(1, "LOG_AuthResultDone"),
+            UA_NODEID_NUMERIC(0, UA_NS0ID_BASEDATAVARIABLETYPE),
+            a, NULL, NULL);
+    }
+
+        /* arrival/order_id */
+    {
+        UA_VariableAttributes a = UA_VariableAttributes_default;
+        a.displayName = UA_LOCALIZEDTEXT("en-US", "LOG_ArrivalOrderId");
+        UA_String s = UA_STRING("");
+        UA_Variant_setScalar(&a.value, &s, &UA_TYPES[UA_TYPES_STRING]);
+        a.accessLevel = UA_ACCESSLEVELMASK_READ | UA_ACCESSLEVELMASK_WRITE;
+        a.userAccessLevel = UA_ACCESSLEVELMASK_READ | UA_ACCESSLEVELMASK_WRITE;
+
+        UA_Server_addVariableNode(server,
+            ARRIVAL_ORDER_ID_ID,
+            UA_NODEID_NUMERIC(0, UA_NS0ID_OBJECTSFOLDER),
+            UA_NODEID_NUMERIC(0, UA_NS0ID_ORGANIZES),
+            UA_QUALIFIEDNAME(1, "LOG_ArrivalOrderId"),
+            UA_NODEID_NUMERIC(0, UA_NS0ID_BASEDATAVARIABLETYPE),
+            a, NULL, NULL);
+    }
+
+    /* arrival/pending */
+    {
+        UA_VariableAttributes a = UA_VariableAttributes_default;
+        a.displayName = UA_LOCALIZEDTEXT("en-US", "LOG_ArrivalPending");
+        UA_Boolean b = false;
+        UA_Variant_setScalar(&a.value, &b, &UA_TYPES[UA_TYPES_BOOLEAN]);
+        a.accessLevel = UA_ACCESSLEVELMASK_READ | UA_ACCESSLEVELMASK_WRITE;
+        a.userAccessLevel = UA_ACCESSLEVELMASK_READ | UA_ACCESSLEVELMASK_WRITE;
+
+        UA_Server_addVariableNode(server,
+            ARRIVAL_PENDING_ID,
+            UA_NODEID_NUMERIC(0, UA_NS0ID_OBJECTSFOLDER),
+            UA_NODEID_NUMERIC(0, UA_NS0ID_ORGANIZES),
+            UA_QUALIFIEDNAME(1, "LOG_ArrivalPending"),
+            UA_NODEID_NUMERIC(0, UA_NS0ID_BASEDATAVARIABLETYPE),
+            a, NULL, NULL);
+    }
+
+    /* arrival/done */
+    {
+        UA_VariableAttributes a = UA_VariableAttributes_default;
+        a.displayName = UA_LOCALIZEDTEXT("en-US", "LOG_ArrivalDone");
+        UA_Boolean b = false;
+        UA_Variant_setScalar(&a.value, &b, &UA_TYPES[UA_TYPES_BOOLEAN]);
+        a.accessLevel = UA_ACCESSLEVELMASK_READ | UA_ACCESSLEVELMASK_WRITE;
+        a.userAccessLevel = UA_ACCESSLEVELMASK_READ | UA_ACCESSLEVELMASK_WRITE;
+
+        UA_Server_addVariableNode(server,
+            ARRIVAL_DONE_ID,
+            UA_NODEID_NUMERIC(0, UA_NS0ID_OBJECTSFOLDER),
+            UA_NODEID_NUMERIC(0, UA_NS0ID_ORGANIZES),
+            UA_QUALIFIEDNAME(1, "LOG_ArrivalDone"),
+            UA_NODEID_NUMERIC(0, UA_NS0ID_BASEDATAVARIABLETYPE),
+            a, NULL, NULL);
+    }
+
+    /* arrival/ok */
+    {
+        UA_VariableAttributes a = UA_VariableAttributes_default;
+        a.displayName = UA_LOCALIZEDTEXT("en-US", "LOG_ArrivalOk");
+        UA_Boolean b = false;
+        UA_Variant_setScalar(&a.value, &b, &UA_TYPES[UA_TYPES_BOOLEAN]);
+        a.accessLevel = UA_ACCESSLEVELMASK_READ | UA_ACCESSLEVELMASK_WRITE;
+        a.userAccessLevel = UA_ACCESSLEVELMASK_READ | UA_ACCESSLEVELMASK_WRITE;
+
+        UA_Server_addVariableNode(server,
+            ARRIVAL_OK_ID,
+            UA_NODEID_NUMERIC(0, UA_NS0ID_OBJECTSFOLDER),
+            UA_NODEID_NUMERIC(0, UA_NS0ID_ORGANIZES),
+            UA_QUALIFIEDNAME(1, "LOG_ArrivalOk"),
+            UA_NODEID_NUMERIC(0, UA_NS0ID_BASEDATAVARIABLETYPE),
+            a, NULL, NULL);
+    }
+
+    /* arrival/msg */
+    {
+        UA_VariableAttributes a = UA_VariableAttributes_default;
+        a.displayName = UA_LOCALIZEDTEXT("en-US", "LOG_ArrivalMsg");
+        UA_String s = UA_STRING("");
+        UA_Variant_setScalar(&a.value, &s, &UA_TYPES[UA_TYPES_STRING]);
+        a.accessLevel = UA_ACCESSLEVELMASK_READ | UA_ACCESSLEVELMASK_WRITE;
+        a.userAccessLevel = UA_ACCESSLEVELMASK_READ | UA_ACCESSLEVELMASK_WRITE;
+
+        UA_Server_addVariableNode(server,
+            ARRIVAL_MSG_ID,
+            UA_NODEID_NUMERIC(0, UA_NS0ID_OBJECTSFOLDER),
+            UA_NODEID_NUMERIC(0, UA_NS0ID_ORGANIZES),
+            UA_QUALIFIEDNAME(1, "LOG_ArrivalMsg"),
+            UA_NODEID_NUMERIC(0, UA_NS0ID_BASEDATAVARIABLETYPE),
+            a, NULL, NULL);
+    }
     /* Method: Move(warehouse:uint16, qty:uint32) */
     {
         UA_Argument inArgs[2];
@@ -872,6 +1195,8 @@ int main(void) {
     printf("[LOG] Ready: discovery(None-only) + session(encrypted), no Anonymous\n");
 
     rc = UA_Server_run_startup(server);
+    g_auth_start_time = time(NULL);
+    pthread_create(&g_auth_thread, NULL, auth_input_thread_fn, NULL);
     UA_UInt64 dhtCbId = 0;
     UA_StatusCode rc3 = UA_Server_addRepeatedCallback(server, log_dht_update_cb, NULL, 1200, &dhtCbId);
     printf("[LOG] startup rc=0x%08x\n", (unsigned)rc);
@@ -889,9 +1214,44 @@ int main(void) {
     printf("[LOG] running... Ctrl+C to stop\n");
     while(g_running) {
         UA_Server_run_iterate(server, false);
-        usleep(10 * 1000); /* 10ms */
-    }
+        usleep(10 * 1000);
+        if(!g_auth_ok && !g_auth_input_ready) {
+            time_t now = time(NULL);
+            if(now - g_auth_start_time > 30) {
+                printf("[MFG] auth input timeout -> shutdown\n");
+                g_running = 0;
+            }
+        }
 
+        if(!g_auth_request_sent) {
+            pthread_mutex_lock(&g_auth_mu);
+            if(g_auth_input_ready) {
+                write_string_node(server, AUTH_REQ_ID_ID, g_auth_input_id);
+                write_string_node(server, AUTH_REQ_PW_ID, g_auth_input_pw);
+                write_bool_node(server, AUTH_RESULT_OK_ID, false);
+                write_bool_node(server, AUTH_RESULT_DONE_ID, false);
+                write_bool_node(server, AUTH_REQ_PENDING_ID, true);
+                g_auth_request_sent = true;
+                printf("[LOG] auth request sent to MES\n");
+            }
+            pthread_mutex_unlock(&g_auth_mu);
+        }
+
+        if(g_auth_request_sent && !g_auth_ok) {
+            UA_Boolean done = read_bool_node(server, AUTH_RESULT_DONE_ID, false);
+            if(done) {
+                UA_Boolean ok = read_bool_node(server, AUTH_RESULT_OK_ID, false);
+                if(ok) {
+                    g_auth_ok = true;
+                    write_bool_node(server, AUTH_REQ_PENDING_ID, false);
+                    printf("[LOG] auth approved by MES\n");
+                } else {
+                    printf("[LOG] auth rejected by MES -> shutdown\n");
+                    g_running = 0;
+                }
+            }
+        }
+    }
     UA_Server_run_shutdown(server);
     UA_Server_delete(server);
 
