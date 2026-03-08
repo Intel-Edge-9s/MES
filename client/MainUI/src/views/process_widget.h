@@ -31,7 +31,7 @@ private:
     void add_process_item(QTreeWidgetItem *parent_item,
                           const QString &process_name);
 
-    OpcUaService *m_ua; //서비스를 저장할 포인터변수
+    OpcUaService *m_ua = nullptr; // 초기값은 nullptr로 설정
 };
 
 #endif // PROCESS_WIDGET_H
