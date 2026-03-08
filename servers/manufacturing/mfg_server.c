@@ -25,17 +25,22 @@
 #include <string.h>
 #include <errno.h>
 #include <stdlib.h>
+#include <pthread.h>
 
 #include <open62541/server.h>
 #include <open62541/server_config_default.h>
 #include <open62541/plugin/log_stdout.h>
 #include <open62541/plugin/accesscontrol_default.h>
 #define DEFECT_THRESHOLD 40  /* 10% */
-
+//==========로그인리퀘스트 대기시간=-===============
+static time_t g_auth_start_time = 0;
 /* ---------- Production state ---------- */
 static UA_UInt64 g_prod_cb_id = 0;
 static UA_Boolean g_prod_cb_active = false;
 
+static UA_UInt16 g_product_no = 0;
+static UA_UInt32 g_target_qty = 0;
+static UA_UInt32 g_current_qty = 0;
 static uint64_t g_attempt_count = 0;
 static uint64_t g_total_count = 0;
 static uint64_t g_defect_count = 0;
@@ -80,6 +85,32 @@ static UA_ByteString loadFile(const char *path) {
     }
     return bs;
 }
+//---------------로그인 헬퍼------------
+static void write_bool_node(UA_Server *server, UA_NodeId id, UA_Boolean b) {
+    UA_Variant v;
+    UA_Variant_setScalar(&v, &b, &UA_TYPES[UA_TYPES_BOOLEAN]);
+    (void)UA_Server_writeValue(server, id, v);
+}
+
+static void write_string_node(UA_Server *server, UA_NodeId id, const char *s) {
+    UA_String us = UA_STRING((char*)s);
+    UA_Variant v;
+    UA_Variant_setScalar(&v, &us, &UA_TYPES[UA_TYPES_STRING]);
+    (void)UA_Server_writeValue(server, id, v);
+}
+
+static UA_Boolean read_bool_node(UA_Server *server, UA_NodeId id, UA_Boolean defVal) {
+    UA_Boolean out = defVal;
+    UA_Variant v; UA_Variant_init(&v);
+    if(UA_Server_readValue(server, id, &v) == UA_STATUSCODE_GOOD &&
+       UA_Variant_hasScalarType(&v, &UA_TYPES[UA_TYPES_BOOLEAN])) {
+        out = *(UA_Boolean*)v.data;
+    }
+    UA_Variant_clear(&v);
+    return out;
+}
+
+
 /*======cov speed->period======*/
 static UA_UInt32 speed_to_period_ms(double speed_pct) {
     if(speed_pct < 0.0) speed_pct = 0.0;
@@ -108,6 +139,47 @@ static UA_NodeId DEFECT_COUNT_ID;
 static UA_NodeId DEFECT_RATE_ID;
 static UA_NodeId DEFECT_CODE_ID;
 static UA_NodeId ATTEMPT_COUNT_ID;
+static UA_NodeId AUTH_REQ_ID_ID;
+static UA_NodeId AUTH_REQ_PW_ID;
+static UA_NodeId AUTH_REQ_PENDING_ID;
+static UA_NodeId AUTH_RESULT_OK_ID;
+static UA_NodeId AUTH_RESULT_DONE_ID;
+
+static UA_Boolean g_auth_ok = false;
+static UA_Boolean g_auth_request_sent = false;
+static UA_Boolean g_auth_input_ready = false;
+
+static pthread_t g_auth_thread;
+static pthread_mutex_t g_auth_mu = PTHREAD_MUTEX_INITIALIZER;
+
+static char g_auth_input_id[64] = {0};
+static char g_auth_input_pw[64] = {0};
+//==================로그인헬퍼==========
+static void *auth_input_thread_fn(void *arg) {
+    (void)arg;
+
+    char id[64] = {0};
+    char pw[64] = {0};
+
+    printf("=== MFG SERVER LOGIN ===\n");
+    printf("ID: ");
+    fflush(stdout);
+    if(scanf("%63s", id) != 1)
+        return NULL;
+
+    printf("PW: ");
+    fflush(stdout);
+    if(scanf("%63s", pw) != 1)
+        return NULL;
+
+    pthread_mutex_lock(&g_auth_mu);
+    snprintf(g_auth_input_id, sizeof(g_auth_input_id), "%s", id);
+    snprintf(g_auth_input_pw, sizeof(g_auth_input_pw), "%s", pw);
+    g_auth_input_ready = true;
+    pthread_mutex_unlock(&g_auth_mu);
+
+    return NULL;
+}
 /* =========read Speed_id helper===============*/
 static double read_speed_pct(UA_Server *server) {
     double spd = 0.0;
@@ -129,6 +201,8 @@ static double read_speed_pct(UA_Server *server) {
 /*==========Method callback:produce=======*/
 static void production_cb(UA_Server *server, void *data) {
     (void)data;
+    if(!g_auth_ok)
+    return;
 
     if(!g_mfg_running)
         return;
@@ -140,51 +214,83 @@ static void production_cb(UA_Server *server, void *data) {
     int roll = rand() % 100; /* 0..99 */
     UA_Boolean defect = (roll < DEFECT_THRESHOLD) ? UA_TRUE : UA_FALSE;
     UA_UInt16 defect_code = 0;
+
     if(defect) {
         defect_code = (UA_UInt16)(1 + (rand() % 3)); /* 1..3 */
     }
+
     g_attempt_count++;
+
     if(defect) {
         g_defect_count++;
     } else {
         g_total_count++;
+        g_current_qty++;   /* ✅ 실제 생산 성공 수량 */
     }
 
     UA_UInt64 prod_count_u64   = (UA_UInt64)g_total_count;
     UA_UInt64 defect_count_u64 = (UA_UInt64)g_defect_count;
-    UA_UInt64 attempt_u64 = (UA_UInt64)g_attempt_count;
+    UA_UInt64 attempt_u64      = (UA_UInt64)g_attempt_count;
     UA_Double defect_rate = (g_attempt_count == 0) ? 0.0 :
         ((UA_Double)g_defect_count * 100.0 / (UA_Double)g_attempt_count);
 
-    UA_Variant v1,v2,v3,v4;
-    UA_Variant vA;
-    UA_Variant_setScalar(&vA, &attempt_u64, &UA_TYPES[UA_TYPES_UINT64]);
+    UA_Variant vA, v1, v2, v3, v4;
+    UA_Variant_init(&vA);
+    UA_Variant_init(&v1);
+    UA_Variant_init(&v2);
+    UA_Variant_init(&v3);
+    UA_Variant_init(&v4);
+
+    UA_Variant_setScalar(&vA, &attempt_u64,      &UA_TYPES[UA_TYPES_UINT64]);
     UA_Variant_setScalar(&v1, &prod_count_u64,   &UA_TYPES[UA_TYPES_UINT64]);
     UA_Variant_setScalar(&v2, &defect_count_u64, &UA_TYPES[UA_TYPES_UINT64]);
     UA_Variant_setScalar(&v3, &defect_rate,      &UA_TYPES[UA_TYPES_DOUBLE]);
     UA_Variant_setScalar(&v4, &defect_code,      &UA_TYPES[UA_TYPES_UINT16]);
 
     UA_Server_writeValue(server, ATTEMPT_COUNT_ID, vA);
-    UA_Server_writeValue(server, PROD_COUNT_ID,   v1);
-    UA_Server_writeValue(server, DEFECT_COUNT_ID, v2);
-    UA_Server_writeValue(server, DEFECT_RATE_ID,  v3);
-    UA_Server_writeValue(server, DEFECT_CODE_ID,  v4);
+    UA_Server_writeValue(server, PROD_COUNT_ID,    v1);
+    UA_Server_writeValue(server, DEFECT_COUNT_ID,  v2);
+    UA_Server_writeValue(server, DEFECT_RATE_ID,   v3);
+    UA_Server_writeValue(server, DEFECT_CODE_ID,   v4);
 
     const char *codeStr =
         (defect_code==0) ? "OK" :
         (defect_code==1) ? "파손" :
         (defect_code==2) ? "기준미달" :
         (defect_code==3) ? "치수오차" : "UNKNOWN";
-    printf("[MFG][PROD] attempt=%lu ok=%lu defect=%lu rate=%.2f%% code=%u(%s)\n",
-       g_attempt_count,
-       g_total_count,
-       g_defect_count,
-       defect_rate,
-       defect_code,
-       codeStr);
-    fflush(stdout);
-}
 
+    printf("[MFG][PROD] product=%u target=%u current=%u attempt=%lu ok=%lu defect=%lu rate=%.2f%% code=%u(%s)\n",
+           (unsigned)g_product_no,
+           (unsigned)g_target_qty,
+           (unsigned)g_current_qty,
+           g_attempt_count,
+           g_total_count,
+           g_defect_count,
+           defect_rate,
+           defect_code,
+           codeStr);
+    fflush(stdout);
+
+    /* ✅ 목표 수량 생산 완료 시 자동 정지 */
+    if(g_target_qty > 0 && g_current_qty >= g_target_qty) {
+        printf("[MFG] ORDER COMPLETE: product=%u qty=%u\n",
+               (unsigned)g_product_no,
+               (unsigned)g_target_qty);
+
+        UA_String done = UA_STRING("Done");
+        UA_Variant vs;
+        UA_Variant_init(&vs);
+        UA_Variant_setScalar(&vs, &done, &UA_TYPES[UA_TYPES_STRING]);
+        (void)UA_Server_writeValue(server, STATUS_ID, vs);
+
+        g_mfg_running = false;
+
+        if(g_prod_cb_active) {
+            UA_Server_removeRepeatedCallback(server, g_prod_cb_id);
+            g_prod_cb_active = false;
+        }
+    }
+}
 /* ---------- Method callback:StartOrder ---------- */
 static UA_StatusCode
 StartOrder_cb(UA_Server *server,
@@ -193,20 +299,81 @@ StartOrder_cb(UA_Server *server,
               const UA_NodeId *objectId, void *objectContext,
               size_t inputSize, const UA_Variant *input,
               size_t outputSize, UA_Variant *output) {
-    (void)sessionId; (void)sessionContext; (void)methodId; (void)methodContext;
-    (void)objectId; (void)objectContext; (void)outputSize; (void)output;
+    (void)sessionId; (void)sessionContext;
+    (void)methodId; (void)methodContext;
+    (void)objectId; (void)objectContext;
+    (void)outputSize; (void)output;
 
-    if(inputSize != 1 || !UA_Variant_hasScalarType(&input[0], &UA_TYPES[UA_TYPES_STRING]))
+    if(!g_auth_ok)
+    return UA_STATUSCODE_BADUSERACCESSDENIED;
+
+    if(inputSize != 3)
         return UA_STATUSCODE_BADINVALIDARGUMENT;
 
-    UA_String orderId = *(UA_String*)input[0].data;
-    printf("[MFG] StartOrder called: %.*s\n", (int)orderId.length, (char*)orderId.data);
-    /* 현재 컨베이어 속도 읽어서 출력 */
+    if(!UA_Variant_hasScalarType(&input[0], &UA_TYPES[UA_TYPES_STRING]))
+        return UA_STATUSCODE_BADTYPEMISMATCH;
+
+    if(!UA_Variant_hasScalarType(&input[1], &UA_TYPES[UA_TYPES_UINT16]))
+        return UA_STATUSCODE_BADTYPEMISMATCH;
+
+    if(!UA_Variant_hasScalarType(&input[2], &UA_TYPES[UA_TYPES_UINT32]))
+        return UA_STATUSCODE_BADTYPEMISMATCH;
+
+    UA_String orderId   = *(UA_String*)input[0].data;
+    UA_UInt16 productNo = *(UA_UInt16*)input[1].data;
+    UA_UInt32 qty       = *(UA_UInt32*)input[2].data;
+
+    if(qty == 0) {
+        printf("[MFG] StartOrder rejected: qty=0\n");
+        return UA_STATUSCODE_BADINVALIDARGUMENT;
+    }
+
+    printf("[MFG] StartOrder called: order=%.*s product=%u qty=%u\n",
+           (int)orderId.length, (char*)orderId.data,
+           (unsigned)productNo, (unsigned)qty);
+
+    /* 새 오더 시작 시 생산 상태 초기화 */
+    g_product_no    = productNo;
+    g_target_qty    = qty;
+    g_current_qty   = 0;
+    g_attempt_count = 0;
+    g_total_count   = 0;
+    g_defect_count  = 0;
+    g_mfg_running   = true;
+
+    /* 카운트 노드도 0으로 초기화 */
     {
-        UA_Variant v; UA_Variant_init(&v);
+        UA_UInt64 z64 = 0;
+        UA_UInt16 z16 = 0;
+        UA_Double zD  = 0.0;
+
+        UA_Variant vA, v1, v2, v3, v4;
+        UA_Variant_init(&vA);
+        UA_Variant_init(&v1);
+        UA_Variant_init(&v2);
+        UA_Variant_init(&v3);
+        UA_Variant_init(&v4);
+
+        UA_Variant_setScalar(&vA, &z64, &UA_TYPES[UA_TYPES_UINT64]);
+        UA_Variant_setScalar(&v1, &z64, &UA_TYPES[UA_TYPES_UINT64]);
+        UA_Variant_setScalar(&v2, &z64, &UA_TYPES[UA_TYPES_UINT64]);
+        UA_Variant_setScalar(&v3, &zD,  &UA_TYPES[UA_TYPES_DOUBLE]);
+        UA_Variant_setScalar(&v4, &z16, &UA_TYPES[UA_TYPES_UINT16]);
+
+        (void)UA_Server_writeValue(server, ATTEMPT_COUNT_ID, vA);
+        (void)UA_Server_writeValue(server, PROD_COUNT_ID,    v1);
+        (void)UA_Server_writeValue(server, DEFECT_COUNT_ID,  v2);
+        (void)UA_Server_writeValue(server, DEFECT_RATE_ID,   v3);
+        (void)UA_Server_writeValue(server, DEFECT_CODE_ID,   v4);
+    }
+
+    /* 현재 속도 출력 */
+    {
+        UA_Variant v;
+        UA_Variant_init(&v);
         UA_StatusCode rc = UA_Server_readValue(server, SPEED_ID, &v);
         if(rc == UA_STATUSCODE_GOOD &&
-        UA_Variant_hasScalarType(&v, &UA_TYPES[UA_TYPES_DOUBLE])) {
+           UA_Variant_hasScalarType(&v, &UA_TYPES[UA_TYPES_DOUBLE])) {
             double spd = *(double*)v.data;
             printf("[MFG] ConveyorSpeed = %.1f %%\n", spd);
         } else {
@@ -214,15 +381,23 @@ StartOrder_cb(UA_Server *server,
         }
         UA_Variant_clear(&v);
     }
-    /* status = "Running" */
-    UA_String running = UA_STRING("Running");
-    UA_Variant v;
-    UA_Variant_init(&v);
-    UA_Variant_setScalar(&v, &running, &UA_TYPES[UA_TYPES_STRING]);
-    (void)UA_Server_writeValue(server, STATUS_ID, v);
-    g_mfg_running = true;
-    /* 생산 콜백 등록(속도 기반 주기) */
-    if(!g_prod_cb_active) {
+
+    /* status = Running */
+    {
+        UA_String running = UA_STRING("Running");
+        UA_Variant v;
+        UA_Variant_init(&v);
+        UA_Variant_setScalar(&v, &running, &UA_TYPES[UA_TYPES_STRING]);
+        (void)UA_Server_writeValue(server, STATUS_ID, v);
+    }
+
+    /* 기존 콜백 있으면 제거 후 새로 시작 */
+    if(g_prod_cb_active) {
+        UA_Server_removeRepeatedCallback(server, g_prod_cb_id);
+        g_prod_cb_active = false;
+    }
+
+    {
         double spd = read_speed_pct(server);
         UA_UInt32 period = speed_to_period_ms(spd);
 
@@ -232,15 +407,19 @@ StartOrder_cb(UA_Server *server,
             UA_StatusCode rc2 = UA_Server_addRepeatedCallback(server, production_cb, NULL, period, &g_prod_cb_id);
             if(rc2 == UA_STATUSCODE_GOOD) {
                 g_prod_cb_active = true;
-                printf("[MFG] Production started: speed=%.1f%% period=%ums\n", spd, (unsigned)period);
+                printf("[MFG] Production started: product=%u qty=%u speed=%.1f%% period=%ums\n",
+                       (unsigned)g_product_no,
+                       (unsigned)g_target_qty,
+                       spd,
+                       (unsigned)period);
             } else {
                 printf("[MFG] Production start failed: 0x%08x\n", (unsigned)rc2);
             }
         }
     }
+
     return UA_STATUSCODE_GOOD;
 }
-
 /* ---------- Method callback: StopOrder ---------- */
 static UA_StatusCode
 StopOrder_cb(UA_Server *server,
@@ -249,33 +428,41 @@ StopOrder_cb(UA_Server *server,
              const UA_NodeId *objectId, void *objectContext,
              size_t inputSize, const UA_Variant *input,
              size_t outputSize, UA_Variant *output) {
-    (void)sessionId; (void)sessionContext; (void)methodId; (void)methodContext;
-    (void)objectId; (void)objectContext; (void)inputSize; (void)input;
+    (void)sessionId; (void)sessionContext;
+    (void)methodId; (void)methodContext;
+    (void)objectId; (void)objectContext;
+    (void)inputSize; (void)input;
     (void)outputSize; (void)output;
+
+    if(!g_auth_ok)
+    return UA_STATUSCODE_BADUSERACCESSDENIED;
 
     printf("[MFG] StopOrder called\n");
 
-    /* status = "Stopped" */
     UA_String stopped = UA_STRING("Stopped");
     UA_Variant v;
     UA_Variant_init(&v);
     UA_Variant_setScalar(&v, &stopped, &UA_TYPES[UA_TYPES_STRING]);
     (void)UA_Server_writeValue(server, STATUS_ID, v);
+
     g_mfg_running = false;
-    /* 생산 콜백 제거 */
+
     if(g_prod_cb_active) {
         UA_Server_removeRepeatedCallback(server, g_prod_cb_id);
         g_prod_cb_active = false;
         printf("[MFG] Production stopped\n");
     }
-    /* 생산 통계 초기화 */
+
     g_attempt_count = 0;
     g_total_count   = 0;
     g_defect_count  = 0;
+
+    g_product_no  = 0;
+    g_target_qty  = 0;
+    g_current_qty = 0;
+
     return UA_STATUSCODE_GOOD;
 }
-
-
 
 static UA_StatusCode
 activateSession_strict_cb(UA_Server *server,
@@ -397,15 +584,16 @@ static int read_dht11_iio(double *tempC, double *humPct) {
 
 static void dht_update_cb(UA_Server *server, void *data) {
     (void)data;
-
-    double t=0.0, h=0.0;
-    if(read_dht11_iio(&t, &h) == 0) {
-        UA_Variant vT, vH;
-        UA_Variant_setScalar(&vT, &t, &UA_TYPES[UA_TYPES_DOUBLE]);
-        UA_Variant_setScalar(&vH, &h, &UA_TYPES[UA_TYPES_DOUBLE]);
-        (void)UA_Server_writeValue(server, TEMP_ID, vT);
-        (void)UA_Server_writeValue(server, HUM_ID, vH);
-    }
+    if(!g_auth_ok)
+    return;
+    double t = 25.0 + (rand()%50)/10.0;
+    double h = 50.0 + (rand()%100)/10.0;
+    UA_Variant vT, vH;
+    UA_Variant_setScalar(&vT, &t, &UA_TYPES[UA_TYPES_DOUBLE]);
+    UA_Variant_setScalar(&vH, &h, &UA_TYPES[UA_TYPES_DOUBLE]);
+    (void)UA_Server_writeValue(server, TEMP_ID, vT);
+    (void)UA_Server_writeValue(server, HUM_ID, vH);
+    
 }
 
 /* ---------- Security helpers ---------- */
@@ -527,6 +715,8 @@ int main(void) {
         NULL, 0         /* revocation */
     );
 
+    /*------------------------modified ------------------------------*/
+    cfg->applicationDescription.applicationUri = UA_STRING_ALLOC("urn:opcua:mfg");
     /* ✅ rc 체크는 반드시 바로 */
     if(rc != UA_STATUSCODE_GOOD) {
         printf("[MFG] Security config failed: 0x%08x\n", (unsigned)rc);
@@ -556,6 +746,11 @@ int main(void) {
     DEFECT_RATE_ID  = UA_NODEID_STRING(1, "mfg/defect_rate");
     DEFECT_CODE_ID  = UA_NODEID_STRING(1, "mfg/defect_code");
     ATTEMPT_COUNT_ID = UA_NODEID_STRING(1, "mfg/attempt_count");
+    AUTH_REQ_ID_ID      = UA_NODEID_STRING(1, "mfg/auth/request_id");
+    AUTH_REQ_PW_ID      = UA_NODEID_STRING(1, "mfg/auth/request_pw");
+    AUTH_REQ_PENDING_ID = UA_NODEID_STRING(1, "mfg/auth/request_pending");
+    AUTH_RESULT_OK_ID   = UA_NODEID_STRING(1, "mfg/auth/result_ok");
+    AUTH_RESULT_DONE_ID = UA_NODEID_STRING(1, "mfg/auth/result_done");
     /* Status node */
     {
         UA_VariableAttributes attr = UA_VariableAttributes_default;
@@ -658,6 +853,8 @@ int main(void) {
             printf("[MFG] add prod_count failed: 0x%08x\n", (unsigned)rc2);
     }
 
+
+
     /* defect_count (UInt64) */
     {
         UA_VariableAttributes a = UA_VariableAttributes_default;
@@ -741,15 +938,115 @@ int main(void) {
         if(rc2 != UA_STATUSCODE_GOOD)
             printf("[MFG] add attempt_count failed: 0x%08x\n", (unsigned)rc2);
     }
-
-
-    /* Method: StartOrder(orderId:String) */
+    /* auth request_id */
     {
-        UA_Argument inArg;
-        UA_Argument_init(&inArg);
-        inArg.name = UA_STRING("orderId");
-        inArg.dataType = UA_TYPES[UA_TYPES_STRING].typeId;
-        inArg.valueRank = -1;
+        UA_VariableAttributes a = UA_VariableAttributes_default;
+        a.displayName = UA_LOCALIZEDTEXT("en-US", "MFG_AuthRequestId");
+        UA_String s = UA_STRING("");
+        UA_Variant_setScalar(&a.value, &s, &UA_TYPES[UA_TYPES_STRING]);
+        a.accessLevel = UA_ACCESSLEVELMASK_READ;
+        a.userAccessLevel = UA_ACCESSLEVELMASK_READ;
+
+        UA_Server_addVariableNode(server,
+            AUTH_REQ_ID_ID,
+            UA_NODEID_NUMERIC(0, UA_NS0ID_OBJECTSFOLDER),
+            UA_NODEID_NUMERIC(0, UA_NS0ID_ORGANIZES),
+            UA_QUALIFIEDNAME(1, "MFG_AuthRequestId"),
+            UA_NODEID_NUMERIC(0, UA_NS0ID_BASEDATAVARIABLETYPE),
+            a, NULL, NULL);
+    }
+
+    /* auth request_pw */
+    {
+        UA_VariableAttributes a = UA_VariableAttributes_default;
+        a.displayName = UA_LOCALIZEDTEXT("en-US", "MFG_AuthRequestPw");
+        UA_String s = UA_STRING("");
+        UA_Variant_setScalar(&a.value, &s, &UA_TYPES[UA_TYPES_STRING]);
+        a.accessLevel = UA_ACCESSLEVELMASK_READ;
+        a.userAccessLevel = UA_ACCESSLEVELMASK_READ;
+
+        UA_Server_addVariableNode(server,
+            AUTH_REQ_PW_ID,
+            UA_NODEID_NUMERIC(0, UA_NS0ID_OBJECTSFOLDER),
+            UA_NODEID_NUMERIC(0, UA_NS0ID_ORGANIZES),
+            UA_QUALIFIEDNAME(1, "MFG_AuthRequestPw"),
+            UA_NODEID_NUMERIC(0, UA_NS0ID_BASEDATAVARIABLETYPE),
+            a, NULL, NULL);
+    }
+
+    /* auth request_pending */
+    {
+        UA_VariableAttributes a = UA_VariableAttributes_default;
+        a.displayName = UA_LOCALIZEDTEXT("en-US", "MFG_AuthRequestPending");
+        UA_Boolean b = false;
+        UA_Variant_setScalar(&a.value, &b, &UA_TYPES[UA_TYPES_BOOLEAN]);
+        a.accessLevel = UA_ACCESSLEVELMASK_READ | UA_ACCESSLEVELMASK_WRITE;
+        a.userAccessLevel = UA_ACCESSLEVELMASK_READ | UA_ACCESSLEVELMASK_WRITE;
+
+        UA_Server_addVariableNode(server,
+            AUTH_REQ_PENDING_ID,
+            UA_NODEID_NUMERIC(0, UA_NS0ID_OBJECTSFOLDER),
+            UA_NODEID_NUMERIC(0, UA_NS0ID_ORGANIZES),
+            UA_QUALIFIEDNAME(1, "MFG_AuthRequestPending"),
+            UA_NODEID_NUMERIC(0, UA_NS0ID_BASEDATAVARIABLETYPE),
+            a, NULL, NULL);
+    }
+
+    /* auth result_ok */
+    {
+        UA_VariableAttributes a = UA_VariableAttributes_default;
+        a.displayName = UA_LOCALIZEDTEXT("en-US", "MFG_AuthResultOk");
+        UA_Boolean b = false;
+        UA_Variant_setScalar(&a.value, &b, &UA_TYPES[UA_TYPES_BOOLEAN]);
+        a.accessLevel = UA_ACCESSLEVELMASK_READ | UA_ACCESSLEVELMASK_WRITE;
+        a.userAccessLevel = UA_ACCESSLEVELMASK_READ | UA_ACCESSLEVELMASK_WRITE;
+
+        UA_Server_addVariableNode(server,
+            AUTH_RESULT_OK_ID,
+            UA_NODEID_NUMERIC(0, UA_NS0ID_OBJECTSFOLDER),
+            UA_NODEID_NUMERIC(0, UA_NS0ID_ORGANIZES),
+            UA_QUALIFIEDNAME(1, "MFG_AuthResultOk"),
+            UA_NODEID_NUMERIC(0, UA_NS0ID_BASEDATAVARIABLETYPE),
+            a, NULL, NULL);
+    }
+
+    /* auth result_done */
+    {
+        UA_VariableAttributes a = UA_VariableAttributes_default;
+        a.displayName = UA_LOCALIZEDTEXT("en-US", "MFG_AuthResultDone");
+        UA_Boolean b = false;
+        UA_Variant_setScalar(&a.value, &b, &UA_TYPES[UA_TYPES_BOOLEAN]);
+        a.accessLevel = UA_ACCESSLEVELMASK_READ | UA_ACCESSLEVELMASK_WRITE;
+        a.userAccessLevel = UA_ACCESSLEVELMASK_READ | UA_ACCESSLEVELMASK_WRITE;
+
+        UA_Server_addVariableNode(server,
+            AUTH_RESULT_DONE_ID,
+            UA_NODEID_NUMERIC(0, UA_NS0ID_OBJECTSFOLDER),
+            UA_NODEID_NUMERIC(0, UA_NS0ID_ORGANIZES),
+            UA_QUALIFIEDNAME(1, "MFG_AuthResultDone"),
+            UA_NODEID_NUMERIC(0, UA_NS0ID_BASEDATAVARIABLETYPE),
+            a, NULL, NULL);
+    }
+
+
+    /* Method: StartOrder(orderId:String, productNo:UInt16, qty:UInt32) */
+    {
+        UA_Argument inArg[3];
+        UA_Argument_init(&inArg[0]);
+        UA_Argument_init(&inArg[1]);
+        UA_Argument_init(&inArg[2]);
+
+        inArg[0].name = UA_STRING("orderId");
+        inArg[0].dataType = UA_TYPES[UA_TYPES_STRING].typeId;
+        inArg[0].valueRank = -1;
+
+        inArg[1].name = UA_STRING("productNo");
+        inArg[1].dataType = UA_TYPES[UA_TYPES_UINT16].typeId;
+        inArg[1].valueRank = -1;
+
+        inArg[2].name = UA_STRING("qty");
+        inArg[2].dataType = UA_TYPES[UA_TYPES_UINT32].typeId;
+        inArg[2].valueRank = -1;
 
         UA_MethodAttributes ma = UA_MethodAttributes_default;
         ma.displayName = UA_LOCALIZEDTEXT("en-US", "StartOrder");
@@ -763,7 +1060,7 @@ int main(void) {
             UA_QUALIFIEDNAME(1, "StartOrder"),
             ma,
             &StartOrder_cb,
-            1, &inArg,
+            3, inArg,
             0, NULL,
             NULL, NULL);
 
@@ -796,6 +1093,8 @@ int main(void) {
 
     /* --- IMPORTANT: startup opens the port --- */
     rc = UA_Server_run_startup(server);
+    g_auth_start_time = time(NULL);
+    pthread_create(&g_auth_thread, NULL, auth_input_thread_fn, NULL);
     printf("[MFG] startup rc=0x%08x\n", (unsigned)rc);
     fflush(stdout);
 
@@ -817,6 +1116,42 @@ int main(void) {
     printf("[MFG] running... Ctrl+C to stop\n");
     while(g_running) {
         UA_Server_run_iterate(server, true);
+        if(!g_auth_ok && !g_auth_input_ready) {
+            time_t now = time(NULL);
+            if(now - g_auth_start_time > 30) {
+                printf("[MFG] auth input timeout -> shutdown\n");
+                g_running = 0;
+            }
+        }
+
+        if(!g_auth_request_sent) {
+            pthread_mutex_lock(&g_auth_mu);
+            if(g_auth_input_ready) {
+                write_string_node(server, AUTH_REQ_ID_ID, g_auth_input_id);
+                write_string_node(server, AUTH_REQ_PW_ID, g_auth_input_pw);
+                write_bool_node(server, AUTH_RESULT_OK_ID, false);
+                write_bool_node(server, AUTH_RESULT_DONE_ID, false);
+                write_bool_node(server, AUTH_REQ_PENDING_ID, true);
+                g_auth_request_sent = true;
+                printf("[MFG] auth request sent to MES\n");
+            }
+            pthread_mutex_unlock(&g_auth_mu);
+        }
+
+        if(g_auth_request_sent && !g_auth_ok) {
+            UA_Boolean done = read_bool_node(server, AUTH_RESULT_DONE_ID, false);
+            if(done) {
+                UA_Boolean ok = read_bool_node(server, AUTH_RESULT_OK_ID, false);
+                if(ok) {
+                    g_auth_ok = true;
+                    write_bool_node(server, AUTH_REQ_PENDING_ID, false);
+                    printf("[MFG] auth approved by MES\n");
+                } else {
+                    printf("[MFG] auth rejected by MES -> shutdown\n");
+                    g_running = 0;
+                }
+            }
+        }
     }
 
     /* ---- Shutdown ---- */
