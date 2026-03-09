@@ -91,24 +91,24 @@ MainWindow::~MainWindow() {
 
 void MainWindow::startOpcUaOnce()
 {
-    qDebug() << QFile::exists("/home/pi/MES/servers/certs/mfg/cert.der");
+    qDebug() << QFile::exists("/home/pi/intel_project_1st/MES/servers/certs/mfg/cert.der");
     if (uaStarted) return;
     uaStarted = true;
 
     ua->connectMfg(
         "opc.tcp://10.10.16.208:4850",
         "mes","mespw_change_me",
-        "/home/pi/MES/servers/certs/mes/cert.der",
-        "/home/pi/MES/servers/certs/mes/key.der",
-        "/home/pi/MES/servers/certs/mes/trust_mfg.der"
+        "/home/pi/intel_project_1st/MES/servers/certs/mes/cert.der",
+        "/home/pi/intel_project_1st/MES/servers/certs/mes/key.der",
+        "/home/pi/intel_project_1st/MES/servers/certs/mes/trust_mfg.der"
         );
 
     ua->connectLog(
         "opc.tcp://10.10.16.210:4841",
         "mes","mespw_change_me",
-        "/home/pi/MES/servers/certs/mes/cert.der",
-        "/home/pi/MES/servers/certs/mes/key.der",
-        "/home/pi/MES/servers/certs/mes/trust_log.der"
+        "/home/pi/intel_project_1st/MES/servers/certs/mes/cert.der",
+        "/home/pi/intel_project_1st/MES/servers/certs/mes/key.der",
+        "/home/pi/intel_project_1st/MES/servers/certs/mes/trust_log.der"
         );
 
 
