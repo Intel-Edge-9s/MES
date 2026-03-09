@@ -16,8 +16,8 @@
   <widget class="QWidget" name="gridLayoutWidget">
    <property name="geometry">
     <rect>
-     <x>20</x>
-     <y>60</y>
+     <x>130</x>
+     <y>80</y>
      <width>791</width>
      <height>571</height>
     </rect>
@@ -68,14 +68,14 @@
   <widget class="QPushButton" name="Back_btn">
    <property name="geometry">
     <rect>
-     <x>10</x>
-     <y>10</y>
+     <x>20</x>
+     <y>20</y>
      <width>80</width>
      <height>30</height>
     </rect>
    </property>
    <property name="text">
-    <string>Back</string>
+    <string>뒤로 가기</string>
    </property>
   </widget>
  </widget>

@@ -62,7 +62,7 @@ void ManufactureWidget::setupManufactureTableConfigs()
     // 마우스 휠 한 번에 이동하는 픽셀 수 조절 (부드러운 스크롤)
     ui->manufacture_table->verticalHeader()->setDefaultSectionSize(35); // 행 높이 고정
 
-    // 테이블 끝에 도달했을 때 빈 공간이 생기지 않도록 설정
+    // 테이블 끝에 도달했을 때 빈 공간mfgStatusUpdated이 생기지 않도록 설정
     ui->manufacture_table->verticalHeader()->setStretchLastSection(false);
 }
 
@@ -111,10 +111,10 @@ void ManufactureWidget::loadScheduleData()
     ui->schedule_table->setRowCount(0);
     for (int i = 0; i < schedules.size(); ++i) {
         ui->schedule_table->insertRow(i);
-        
+
         // 데이터 매핑
         QString productDisplayName = QString("[%1] %2").arg(schedules[i].productCode, schedules[i].productName);
-        
+
         ui->schedule_table->setItem(i, 0, createManufactureCenteredItem(productDisplayName));
         ui->schedule_table->setItem(i, 1, createManufactureCenteredItem(QString::number(schedules[i].orderCount)));
         ui->schedule_table->setItem(i, 2, createManufactureCenteredItem(QString::number(schedules[i].motorSpeed)));
@@ -209,16 +209,16 @@ void ManufactureWidget::setupOpcBindings()
 
     // 1. 생산량이 변했을 때 (실시간 Stock 갱신 등)
     connect(ua, &OpcUaService::mfgProdCountUpdated, this, [this](quint64 count){
+        // 현재 이 위젯이 화면에 보이고 있을 때만 UI 갱신 (DB 부하 감소)
+        if (!this->isVisible()) return;
+
         qDebug() << "[MFG UI] Production count updated:" << count;
         loadManufactureData(); // 제품 재고 테이블 갱신
         loadScheduleData();    // 스케줄 진행률(Status) 갱신
     });
 
     // 2. 공정 상태가 변했을 때 (PENDING -> INPROC -> DONE 등)
-    // 만약 OpcUaService에 mfgStatusUpdated 같은 시그널이 있다면 연결하세요.
-    /*
     connect(ua, &OpcUaService::mfgStatusUpdated, this, [this](){
-        loadScheduleData(); 
+        loadScheduleData();
     });
-    */
 }
