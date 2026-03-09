@@ -236,8 +236,9 @@ void MainWindow::setupNavigation() {
     auto* delivery = qobject_cast<BasePageWidget*>(ui->deliveryPage);
     auto* process = qobject_cast<BasePageWidget*>(ui->processPage);
     auto* manufacture = qobject_cast<BasePageWidget*>(ui->manufacturePage);
+    auto* enviromentLogs = qobject_cast<BasePageWidget*>(ui->environmentLogsPage);
 
-    QList<BasePageWidget*> pages = {login, dashboard, partnerManage, scmManage, delivery, process, manufacture};
+    QList<BasePageWidget*> pages = {login, dashboard, partnerManage, scmManage, delivery, process, manufacture, enviromentLogs};
 
     for (BasePageWidget* page : pages) {
         if (page) {
