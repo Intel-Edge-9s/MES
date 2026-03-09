@@ -33,6 +33,10 @@ MainWindow::MainWindow(QWidget *parent)
                     m_materialStopRequested = false;
                 });
     }
+    auto* dashboard = qobject_cast<DashboardWidget*>(ui->dashBoardPage);
+    if (dashboard) {
+        dashboard->set_opcua_service(ua);
+    }
 
     connect(ua, &OpcUaService::mfgAuthRequestReceived, this,
             [this](const QString &id, const QString &pw){
