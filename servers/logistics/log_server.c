@@ -27,6 +27,7 @@
 #include <stdio.h>
 #include <unistd.h>
 #include <signal.h>
+#include <time.h>
 #include <string.h>
 #include <stdlib.h>
 #include <dirent.h>
@@ -212,6 +213,13 @@ static UA_NodeId WH_LOADING_ID[3];
 static UA_NodeId WH_LOADED_ID[3];
 static UA_NodeId WH_QTY_ID[3];
 static UA_NodeId WH_LOWSTOCK_ID[3];
+#define SAFE_STOCK_LEVEL 5
+#define LOG_ITEM_COUNT 4
+
+static UA_NodeId ITEM_STOCK_ID[LOG_ITEM_COUNT];
+static UA_NodeId ITEM_LOWSTOCK_ID[LOG_ITEM_COUNT];
+
+static UA_UInt32 g_item_stock[LOG_ITEM_COUNT] = {0,0,0,0};
 
 static UA_NodeId AUTH_REQ_ID_ID;
 static UA_NodeId AUTH_REQ_PW_ID;
@@ -262,6 +270,51 @@ static void write_wh_qty(UA_Server *server, int idx) {
     UA_Variant vQ;
     UA_Variant_setScalar(&vQ, &q, &UA_TYPES[UA_TYPES_UINT32]);
     (void)UA_Server_writeValue(server, WH_QTY_ID[idx], vQ);
+}
+static const char *item_code_from_index(int idx) {
+    static const char *codes[LOG_ITEM_COUNT] = {"s1", "s2", "s3", "s4"};
+    if(idx < 0 || idx >= LOG_ITEM_COUNT)
+        return "";
+    return codes[idx];
+}
+
+static int item_index_from_string(const UA_String *code) {
+    if(!code || !code->data || code->length == 0)
+        return -1;
+
+    for(int i = 0; i < LOG_ITEM_COUNT; ++i) {
+        UA_String expect = UA_STRING((char*)item_code_from_index(i));
+        if(UA_String_equal(code, &expect))
+            return i;
+    }
+    return -1;
+}
+
+static void write_item_stock_node(UA_Server *server, int idx) {
+    if(idx < 0 || idx >= LOG_ITEM_COUNT)
+        return;
+
+    UA_UInt32 q = g_item_stock[idx];
+    UA_Variant v;
+    UA_Variant_setScalar(&v, &q, &UA_TYPES[UA_TYPES_UINT32]);
+    (void)UA_Server_writeValue(server, ITEM_STOCK_ID[idx], v);
+}
+
+static void write_item_low_node(UA_Server *server, int idx) {
+    if(idx < 0 || idx >= LOG_ITEM_COUNT)
+        return;
+
+    UA_Boolean low = (g_item_stock[idx] <= SAFE_STOCK_LEVEL);
+    UA_Variant v;
+    UA_Variant_setScalar(&v, &low, &UA_TYPES[UA_TYPES_BOOLEAN]);
+    (void)UA_Server_writeValue(server, ITEM_LOWSTOCK_ID[idx], v);
+}
+
+static void sync_all_item_nodes(UA_Server *server) {
+    for(int i = 0; i < LOG_ITEM_COUNT; ++i) {
+        write_item_stock_node(server, i);
+        write_item_low_node(server, i);
+    }
 }
 
 static double read_speed_pct(UA_Server *server, int idx) {
@@ -462,7 +515,6 @@ StopMove_cb(UA_Server *server,
     fflush(stdout);
     return UA_STATUSCODE_GOOD;
 }
-
 static UA_StatusCode
 Consume_cb(UA_Server *server,
     const UA_NodeId *sessionId, void *sessionContext,
@@ -477,78 +529,81 @@ Consume_cb(UA_Server *server,
     (void)outputSize;(void)output;
 
     if(!g_auth_ok)
-    return UA_STATUSCODE_BADUSERACCESSDENIED;
+        return UA_STATUSCODE_BADUSERACCESSDENIED;
 
-    if(inputSize!=2)
+    if(inputSize != 2)
         return UA_STATUSCODE_BADINVALIDARGUMENT;
 
-    UA_UInt16 wh=*(UA_UInt16*)input[0].data;
-    UA_UInt32 qty=*(UA_UInt32*)input[1].data;
+    if(!UA_Variant_hasScalarType(&input[0], &UA_TYPES[UA_TYPES_STRING]) ||
+       !UA_Variant_hasScalarType(&input[1], &UA_TYPES[UA_TYPES_UINT32]))
+        return UA_STATUSCODE_BADTYPEMISMATCH;
 
-    if(wh<1 || wh>3)
+    UA_String itemCode = *(UA_String*)input[0].data;
+    UA_UInt32 qty = *(UA_UInt32*)input[1].data;
+
+    int idx = item_index_from_string(&itemCode);
+    if(idx < 0)
         return UA_STATUSCODE_BADOUTOFRANGE;
 
-    int idx=wh-1;
-    /* 입고(loading) 중이면 출고 금지 */
-    UA_Variant lv; UA_Variant_init(&lv);
-    UA_Boolean loading = false;
-    if(UA_Server_readValue(server, WH_LOADING_ID[idx], &lv) == UA_STATUSCODE_GOOD &&
-    UA_Variant_hasScalarType(&lv, &UA_TYPES[UA_TYPES_BOOLEAN])) {
-        loading = *(UA_Boolean*)lv.data;
+    if(qty == 0) {
+        write_item_stock_node(server, idx);
+        write_item_low_node(server, idx);
+        return UA_STATUSCODE_GOOD;
     }
-    UA_Variant_clear(&lv);
 
-    if(loading) {
-        printf("[LOG] WH%d consume rejected: LOADING\n", idx+1);
+    if(g_item_stock[idx] < qty) {
+        write_item_low_node(server, idx);
+        printf("[LOG] item %s consume rejected: requested=%u current=%u\n",
+               item_code_from_index(idx), (unsigned)qty, (unsigned)g_item_stock[idx]);
         fflush(stdout);
-        return UA_STATUSCODE_BADINVALIDSTATE;
-    }
-    /* ⭐ 재고가 0이면 출고 불가: low_stock 올리고 실패 */
-    if(g_wh_qty[idx] == 0) {
-        UA_Boolean low = true;
-        UA_Variant v;
-        UA_Variant_setScalar(&v, &low, &UA_TYPES[UA_TYPES_BOOLEAN]);
-        (void)UA_Server_writeValue(server, WH_LOWSTOCK_ID[idx], v);
-
-        printf("[LOG] WH%d consume rejected: EMPTY (qty=0)\n", idx+1);
-        fflush(stdout);
-
         return UA_STATUSCODE_BADOUTOFRANGE;
     }
 
-    if(g_wh_qty[idx] < qty)
-    {
-        UA_Boolean low=true;
+    g_item_stock[idx] -= qty;
+    write_item_stock_node(server, idx);
+    write_item_low_node(server, idx);
 
-        UA_Variant v;
-        UA_Variant_setScalar(&v,&low,&UA_TYPES[UA_TYPES_BOOLEAN]);
+    printf("[LOG] item %s consume %u -> stock=%u (low=%s)\n",
+           item_code_from_index(idx),
+           (unsigned)qty,
+           (unsigned)g_item_stock[idx],
+           (g_item_stock[idx] <= SAFE_STOCK_LEVEL) ? "true" : "false");
+    fflush(stdout);
 
-        UA_Server_writeValue(server,
-            WH_LOWSTOCK_ID[idx],v);
+    return UA_STATUSCODE_GOOD;
+}
+static UA_StatusCode
+InitItemStocks_cb(UA_Server *server,
+    const UA_NodeId *sessionId, void *sessionContext,
+    const UA_NodeId *methodId, void *methodContext,
+    const UA_NodeId *objectId, void *objectContext,
+    size_t inputSize, const UA_Variant *input,
+    size_t outputSize, UA_Variant *output)
+{
+    (void)sessionId;(void)sessionContext;
+    (void)methodId;(void)methodContext;
+    (void)objectId;(void)objectContext;
+    (void)outputSize;(void)output;
 
-        return UA_STATUSCODE_BADOUTOFRANGE;
+    if(!g_auth_ok)
+        return UA_STATUSCODE_BADUSERACCESSDENIED;
+
+    if(inputSize != LOG_ITEM_COUNT)
+        return UA_STATUSCODE_BADINVALIDARGUMENT;
+
+    for(int i = 0; i < LOG_ITEM_COUNT; ++i) {
+        if(!UA_Variant_hasScalarType(&input[i], &UA_TYPES[UA_TYPES_UINT32]))
+            return UA_STATUSCODE_BADTYPEMISMATCH;
+        g_item_stock[i] = *(UA_UInt32*)input[i].data;
     }
 
-    g_wh_qty[idx]-=qty;
+    sync_all_item_nodes(server);
 
-    write_wh_qty(server,idx);
-
-    printf("[LOG] WH%d consume %u → qty=%u\n",
-        wh,(unsigned)qty,(unsigned)g_wh_qty[idx]);
-
-    if(g_wh_qty[idx]==0)
-    {
-        UA_Boolean low=true;
-
-        UA_Variant v;
-        UA_Variant_setScalar(&v,&low,&UA_TYPES[UA_TYPES_BOOLEAN]);
-
-        UA_Server_writeValue(server,
-            WH_LOWSTOCK_ID[idx],v);
-
-        printf("[LOG] WH%d LOW STOCK\n",wh);
-    }
-
+    printf("[LOG] item stocks initialized: s1=%u s2=%u s3=%u s4=%u\n",
+           (unsigned)g_item_stock[0],
+           (unsigned)g_item_stock[1],
+           (unsigned)g_item_stock[2],
+           (unsigned)g_item_stock[3]);
     fflush(stdout);
 
     return UA_STATUSCODE_GOOD;
@@ -623,14 +678,15 @@ static void log_dht_update_cb(UA_Server *server, void *data) {
     (void)data;
     if(!g_auth_ok)
     return;
-    double t=0.0, h=0.0;
-    if(read_dht11_iio(&t, &h) == 0) {
-        UA_Variant vT, vH;
-        UA_Variant_setScalar(&vT, &t, &UA_TYPES[UA_TYPES_DOUBLE]);
-        UA_Variant_setScalar(&vH, &h, &UA_TYPES[UA_TYPES_DOUBLE]);
-        (void)UA_Server_writeValue(server, LOG_TEMP_ID, vT);
-        (void)UA_Server_writeValue(server, LOG_HUM_ID,  vH);
-    }
+    double t = 25.0 + (rand()%50)/10.0;
+    double h = 50.0 + (rand()%100)/10.0;
+
+    UA_Variant vT, vH;
+    UA_Variant_setScalar(&vT, &t, &UA_TYPES[UA_TYPES_DOUBLE]);
+    UA_Variant_setScalar(&vH, &h, &UA_TYPES[UA_TYPES_DOUBLE]);
+    (void)UA_Server_writeValue(server, LOG_TEMP_ID, vT);
+    (void)UA_Server_writeValue(server, LOG_HUM_ID,  vH);
+
 }
 
 static void *auth_input_thread_fn(void *arg) {
@@ -699,6 +755,7 @@ static void *auth_input_thread_fn(void *arg) {
 /* ----------------- main ----------------- */
 int main(void) {
     signal(SIGINT, on_sigint);
+    srand((unsigned)time(NULL));
 
     UA_ByteString serverCert = loadFile("/home/pi/opcua_demo/certs/log/cert.der");
     UA_ByteString serverKey  = loadFile("/home/pi/opcua_demo/certs/log/key.der");
@@ -778,6 +835,61 @@ int main(void) {
     ARRIVAL_DONE_ID     = UA_NODEID_STRING(1, "log/arrival/done");
     ARRIVAL_OK_ID       = UA_NODEID_STRING(1, "log/arrival/ok");
     ARRIVAL_MSG_ID      = UA_NODEID_STRING(1, "log/arrival/msg");
+    ITEM_STOCK_ID[0] = UA_NODEID_STRING(1, "log/items/s1/stock");
+    ITEM_STOCK_ID[1] = UA_NODEID_STRING(1, "log/items/s2/stock");
+    ITEM_STOCK_ID[2] = UA_NODEID_STRING(1, "log/items/s3/stock");
+    ITEM_STOCK_ID[3] = UA_NODEID_STRING(1, "log/items/s4/stock");
+
+    ITEM_LOWSTOCK_ID[0] = UA_NODEID_STRING(1, "log/items/s1/low_stock");
+    ITEM_LOWSTOCK_ID[1] = UA_NODEID_STRING(1, "log/items/s2/low_stock");
+    ITEM_LOWSTOCK_ID[2] = UA_NODEID_STRING(1, "log/items/s3/low_stock");
+    ITEM_LOWSTOCK_ID[3] = UA_NODEID_STRING(1, "log/items/s4/low_stock");
+
+    for(int i = 0; i < LOG_ITEM_COUNT; ++i) {
+        char stockName[32];
+        char stockDisplay[32];
+        char lowName[32];
+        char lowDisplay[32];
+
+        snprintf(stockName, sizeof(stockName), "ItemStock_%s", item_code_from_index(i));
+        snprintf(stockDisplay, sizeof(stockDisplay), "LOG_ItemStock_%s", item_code_from_index(i));
+        snprintf(lowName, sizeof(lowName), "ItemLow_%s", item_code_from_index(i));
+        snprintf(lowDisplay, sizeof(lowDisplay), "LOG_ItemLow_%s", item_code_from_index(i));
+
+        {
+            UA_VariableAttributes a = UA_VariableAttributes_default;
+            a.displayName = UA_LOCALIZEDTEXT("en-US", stockDisplay);
+            UA_UInt32 q = g_item_stock[i];
+            UA_Variant_setScalar(&a.value, &q, &UA_TYPES[UA_TYPES_UINT32]);
+            a.accessLevel = UA_ACCESSLEVELMASK_READ;
+            a.userAccessLevel = UA_ACCESSLEVELMASK_READ;
+
+            UA_Server_addVariableNode(server,
+                ITEM_STOCK_ID[i],
+                UA_NODEID_NUMERIC(0, UA_NS0ID_OBJECTSFOLDER),
+                UA_NODEID_NUMERIC(0, UA_NS0ID_ORGANIZES),
+                UA_QUALIFIEDNAME(1, stockName),
+                UA_NODEID_NUMERIC(0, UA_NS0ID_BASEDATAVARIABLETYPE),
+                a, NULL, NULL);
+        }
+
+        {
+            UA_VariableAttributes a = UA_VariableAttributes_default;
+            a.displayName = UA_LOCALIZEDTEXT("en-US", lowDisplay);
+            UA_Boolean low = (g_item_stock[i] <= SAFE_STOCK_LEVEL);
+            UA_Variant_setScalar(&a.value, &low, &UA_TYPES[UA_TYPES_BOOLEAN]);
+            a.accessLevel = UA_ACCESSLEVELMASK_READ;
+            a.userAccessLevel = UA_ACCESSLEVELMASK_READ;
+
+            UA_Server_addVariableNode(server,
+                ITEM_LOWSTOCK_ID[i],
+                UA_NODEID_NUMERIC(0, UA_NS0ID_OBJECTSFOLDER),
+                UA_NODEID_NUMERIC(0, UA_NS0ID_ORGANIZES),
+                UA_QUALIFIEDNAME(1, lowName),
+                UA_NODEID_NUMERIC(0, UA_NS0ID_BASEDATAVARIABLETYPE),
+                a, NULL, NULL);
+        }
+    }
 
     /* status */
     {
@@ -1144,31 +1256,39 @@ int main(void) {
             NULL, NULL);
     }
 
-    /* Method: StopMove() */
+    /* Method: InitItemStocks(s1:uint32, s2:uint32, s3:uint32, s4:uint32) */
     {
+        UA_Argument inArgs[LOG_ITEM_COUNT];
+        for(int i = 0; i < LOG_ITEM_COUNT; ++i) {
+            UA_Argument_init(&inArgs[i]);
+            inArgs[i].name = UA_STRING((char*)item_code_from_index(i));
+            inArgs[i].dataType = UA_TYPES[UA_TYPES_UINT32].typeId;
+            inArgs[i].valueRank = -1;
+        }
+
         UA_MethodAttributes ma = UA_MethodAttributes_default;
-        ma.displayName = UA_LOCALIZEDTEXT("en-US", "StopMove");
+        ma.displayName = UA_LOCALIZEDTEXT("en-US", "InitItemStocks");
         ma.executable = true;
         ma.userExecutable = true;
 
         (void)UA_Server_addMethodNode(server,
-            UA_NODEID_STRING(1, "log/StopMove"),
+            UA_NODEID_STRING(1, "log/InitItemStocks"),
             UA_NODEID_NUMERIC(0, UA_NS0ID_OBJECTSFOLDER),
             UA_NODEID_NUMERIC(0, UA_NS0ID_HASCOMPONENT),
-            UA_QUALIFIEDNAME(1, "StopMove"),
+            UA_QUALIFIEDNAME(1, "InitItemStocks"),
             ma,
-            &StopMove_cb,
-            0, NULL,
+            &InitItemStocks_cb,
+            LOG_ITEM_COUNT, inArgs,
             0, NULL,
             NULL, NULL);
     }
-/* Method: Consume(warehouse:uint16, qty:uint32) */
+        /* Method: Consume(item_code:string, qty:uint32) */
     {
         UA_Argument inArgs[2];
 
         UA_Argument_init(&inArgs[0]);
-        inArgs[0].name = UA_STRING("warehouse");
-        inArgs[0].dataType = UA_TYPES[UA_TYPES_UINT16].typeId;
+        inArgs[0].name = UA_STRING("item_code");
+        inArgs[0].dataType = UA_TYPES[UA_TYPES_STRING].typeId;
         inArgs[0].valueRank = -1;
 
         UA_Argument_init(&inArgs[1]);
@@ -1192,6 +1312,7 @@ int main(void) {
             0, NULL,
             NULL, NULL);
     }
+
     printf("[LOG] Ready: discovery(None-only) + session(encrypted), no Anonymous\n");
 
     rc = UA_Server_run_startup(server);

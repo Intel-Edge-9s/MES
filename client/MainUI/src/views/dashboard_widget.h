@@ -42,14 +42,12 @@ private slots:
     void update_mfg_hum(double hum);
     void update_log_temp(double temp);
     void update_log_hum(double hum);
-    void update_log_conveyor(int idx, bool loading);
 
 private:
     Ui::DashboardWidget *ui;
     void initStorageCharts();
     void initProductionChart();
     void initSensorWidget();
-    void initConveyorWidget();
     void clearLayout(QLayout *layout);
 
     OpcUaService *m_opcua_service = nullptr;
@@ -59,7 +57,12 @@ private:
     QLabel *log_temp_value = nullptr;
     QLabel *log_hum_value  = nullptr;
 
-    QLabel *conveyor_status[3] = {nullptr, nullptr, nullptr};
+    QLabel *machine_status[4] = {nullptr, nullptr, nullptr, nullptr};
+
+    void initMachineStatusWidget();
+    void update_log_conveyor(int idx, bool loading);
+    void update_mfg_conveyor(const QString &status);
+    void setMachineLamp(int idx, bool running);
 };
 
 #endif

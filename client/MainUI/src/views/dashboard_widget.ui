@@ -102,32 +102,6 @@
     <string>공정 관리</string>
    </property>
   </widget>
-  <widget class="QPushButton" name="pushButton_6">
-   <property name="geometry">
-    <rect>
-     <x>920</x>
-     <y>580</y>
-     <width>121</width>
-     <height>61</height>
-    </rect>
-   </property>
-   <property name="text">
-    <string>제조 서버 재 접속</string>
-   </property>
-  </widget>
-  <widget class="QPushButton" name="pushButton_7">
-   <property name="geometry">
-    <rect>
-     <x>760</x>
-     <y>580</y>
-     <width>121</width>
-     <height>61</height>
-    </rect>
-   </property>
-   <property name="text">
-    <string>물류 서버 재 접속</string>
-   </property>
-  </widget>
   <widget class="QWidget" name="verticalLayoutWidget_4">
    <property name="geometry">
     <rect>
@@ -180,20 +154,20 @@
   <widget class="QWidget" name="conveyor_widget" native="true">
    <property name="geometry">
     <rect>
-     <x>300</x>
-     <y>350</y>
-     <width>241</width>
-     <height>80</height>
+     <x>610</x>
+     <y>480</y>
+     <width>451</width>
+     <height>201</height>
     </rect>
    </property>
   </widget>
   <widget class="QWidget" name="sensor_widget" native="true">
    <property name="geometry">
     <rect>
-     <x>299</x>
+     <x>290</x>
      <y>250</y>
-     <width>241</width>
-     <height>80</height>
+     <width>261</width>
+     <height>181</height>
     </rect>
    </property>
   </widget>

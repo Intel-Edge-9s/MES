@@ -209,7 +209,7 @@ void MainWindow::requestMaterialStop(const QString &reason)
 {
     if (m_activeProdOrderId.isEmpty() || m_materialStopRequested)
         return;
-
+    qDebug() << "[MES] requestMaterialStop reason =" << reason;
     m_materialStopRequested = true;
 
 

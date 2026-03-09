@@ -37,16 +37,10 @@ void DashboardWidget::showEvent(QShowEvent *event)
     }
 
     initSensorWidget();
-    initConveyorWidget();
+    initMachineStatusWidget();
     initStorageCharts();
     initProductionChart();
 
-    // 테스트용 - 나중에 삭제
-    QTimer::singleShot(2000, this, [this]() {
-        update_log_conveyor(1, true);   // 컨베이어1 초록
-        update_log_conveyor(2, false);  // 컨베이어2 빨강
-        update_log_conveyor(3, true);   // 컨베이어3 초록
-    });
 }
 
 void DashboardWidget::set_opcua_service(OpcUaService *service)
@@ -64,6 +58,10 @@ void DashboardWidget::set_opcua_service(OpcUaService *service)
             this, &DashboardWidget::update_log_hum);
     connect(m_opcua_service, &OpcUaService::logWhLoadingUpdated,
             this, &DashboardWidget::update_log_conveyor);
+
+
+    connect(m_opcua_service, &OpcUaService::mfgStatusUpdated,
+            this, &DashboardWidget::update_mfg_conveyor);
 }
 
 void DashboardWidget::clearLayout(QLayout *layout)
@@ -169,22 +167,32 @@ void DashboardWidget::update_log_hum(double hum)
    물류 컨베이어 가동 현황
 --------------------------------*/
 
-void DashboardWidget::initConveyorWidget()
+
+
+void DashboardWidget::initMachineStatusWidget()
 {
     if (!ui->conveyor_widget) return;
-    if (ui->conveyor_widget->layout()) return;
+
+    if (ui->conveyor_widget->layout()) {
+        clearLayout(ui->conveyor_widget->layout());
+        delete ui->conveyor_widget->layout();
+    }
 
     QGridLayout *grid = new QGridLayout();
-    grid->setSpacing(8);
-    grid->setContentsMargins(4, 4, 4, 4);
+    grid->setSpacing(12);
+    grid->setContentsMargins(8, 8, 8, 8);
 
-    QStringList names = {"컨베이어1", "컨베이어2", "컨베이어3"};
+    QStringList names = {
+        "물류 컨베이어 1",
+        "물류 컨베이어 2",
+        "물류 컨베이어 3",
+        "제조 컨베이어 1"
+    };
 
-    for (int i = 0; i < 3; ++i) {
-        // 이름 라벨
-        QLabel *name_label = new QLabel(names[i]);
-        name_label->setAlignment(Qt::AlignCenter);
-        name_label->setStyleSheet(
+    for (int i = 0; i < 4; ++i) {
+        QLabel *nameLabel = new QLabel(names[i]);
+        nameLabel->setAlignment(Qt::AlignCenter);
+        nameLabel->setStyleSheet(
             "background-color: #3a3a3a;"
             "color: white;"
             "font-weight: bold;"
@@ -192,40 +200,86 @@ void DashboardWidget::initConveyorWidget()
             "padding: 5px;"
             "border-radius: 4px;"
             );
-        grid->addWidget(name_label, 0, i);
 
-        // 상태 원 라벨
-        QLabel *status_label = new QLabel();
-        status_label->setAlignment(Qt::AlignCenter);
-        status_label->setFixedSize(40, 40);
-        status_label->setStyleSheet(
-            "background-color: #e74c3c;"  // 기본 빨간원
+        QLabel *lamp = new QLabel();
+        lamp->setFixedSize(40, 40);
+        lamp->setAlignment(Qt::AlignCenter);
+
+        lamp->setStyleSheet(
+            "background-color: #e74c3c;"
             "border-radius: 20px;"
+            "border: 1px solid #555;"
             );
-        grid->addWidget(status_label, 1, i, Qt::AlignHCenter);
-        conveyor_status[i] = status_label;
+
+        QLabel *stateText = new QLabel("비동작");
+        stateText->setAlignment(Qt::AlignCenter);
+        stateText->setObjectName(QString("machine_state_%1").arg(i));
+        stateText->setStyleSheet(
+            "color: #dddddd;"
+            "font-size: 10px;"
+            );
+
+        QVBoxLayout *cellLayout = new QVBoxLayout();
+        cellLayout->addWidget(nameLabel);
+        cellLayout->addWidget(lamp, 0, Qt::AlignHCenter);
+        cellLayout->addWidget(stateText);
+
+        QWidget *cellWidget = new QWidget();
+        cellWidget->setLayout(cellLayout);
+
+        grid->addWidget(cellWidget, 0, i);
+
+        machine_status[i] = lamp;
     }
 
     ui->conveyor_widget->setLayout(grid);
 }
 
+void DashboardWidget::setMachineLamp(int idx, bool running)
+{
+    if (idx < 0 || idx >= 4) return;
+    if (!machine_status[idx]) return;
+
+    machine_status[idx]->setStyleSheet(QString(
+                                           "background-color: %1;"
+                                           "border-radius: 20px;"
+                                           "border: 1px solid #555;"
+                                           ).arg(running ? "#2ecc71" : "#e74c3c"));
+
+    QLabel *stateLabel = ui->conveyor_widget->findChild<QLabel*>(QString("machine_state_%1").arg(idx));
+    if (stateLabel) {
+        stateLabel->setText(running ? "동작 중" : "비동작");
+        stateLabel->setStyleSheet(QString(
+                                      "color: %1;"
+                                      "font-size: 10px;"
+                                      "font-weight: bold;"
+                                      ).arg(running ? "#2ecc71" : "#e74c3c"));
+    }
+}
+
 void DashboardWidget::update_log_conveyor(int idx, bool loading)
 {
-    int i = idx - 1;  // 1~3 -> 0~2
+    int i = idx - 1; // 1~3 -> 0~2
     if (i < 0 || i > 2) return;
-    if (!conveyor_status[i]) return;
 
-    if (loading) {
-        conveyor_status[i]->setStyleSheet(
-            "background-color: #2ecc71;"  // 초록원
-            "border-radius: 20px;"
-            );
-    } else {
-        conveyor_status[i]->setStyleSheet(
-            "background-color: #e74c3c;"  // 빨간원
-            "border-radius: 20px;"
-            );
+    setMachineLamp(i, loading);
+}
+
+void DashboardWidget::update_mfg_conveyor(const QString &status)
+{
+    const QString s = status.trimmed().toLower();
+
+    bool running = false;
+
+    if (s == "run" || s == "running" || s == "inproc" || s == "work") {
+        running = true;
     }
+
+    if (s == "idle" || s == "done" || s == "stop" || s == "stopped") {
+        running = false;
+    }
+
+    setMachineLamp(3, running); // 제조는 4번째 칸
 }
 
 
