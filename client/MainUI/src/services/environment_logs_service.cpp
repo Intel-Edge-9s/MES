@@ -77,6 +77,42 @@ QVector<LogEntry> EnvironmentLogsService::fetchRecentLogs()
     return logs;
 }
 
+bool EnvironmentLogsService::insertLog(const int process,
+                                       const QString &sensorType,
+                                       const QString &sensorValue,
+                                       const QString &description)
+{
+    if (!DatabaseManager::instance().connect()) {
+        qDebug() << "[ENV] Database connect failed!";
+        return false;
+    }
+
+    QString processId;
+    if(process==1){
+        processId="1faeda99-1186-4920-9377-4800ee156390";
+
+    }else{
+        processId="63014862-9222-4f98-b74f-f6e4f5bc979a";
+    }
+    QSqlQuery query;
+    query.prepare(
+        "INSERT INTO environment_logs "
+        "(id, process_id, sensor_type, sensor_value, description, event_at) "
+        "VALUES (UUID(), :process_id, :sensor_type, :sensor_value, :description, NOW())"
+        );
+    query.bindValue(":process_id", processId);
+    query.bindValue(":sensor_type", sensorType);
+    query.bindValue(":sensor_value", sensorValue);
+    query.bindValue(":description", description);
+
+    if (!query.exec()) {
+        qDebug() << "[ENV] INSERT failed:" << query.lastError().text();
+        return false;
+    }
+
+    return true;
+}
+
 QVector<LogEntry> EnvironmentLogsService::fetchLogsAfter(const QDateTime &lastEventAt)
 {
     QVector<LogEntry> logs;

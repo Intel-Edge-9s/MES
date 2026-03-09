@@ -11,8 +11,12 @@
 #include "../services/scm_manage_service.h"
 #include "../services/environment_logs_service.h"
 #include <QDebug>
+#include <QMessageBox>
 #include <QTimer>
 #include <QFile>
+const double kFireTestThreshold = 29.5;
+
+
 
 MainWindow::MainWindow(QWidget *parent)
     : QMainWindow(parent), ui(new Ui::MainWindow) {
@@ -20,6 +24,7 @@ MainWindow::MainWindow(QWidget *parent)
     ua = new OpcUaService(this);
     auto* manufacture = qobject_cast<ManufactureWidget*>(ui->manufacturePage);
     auto* process = qobject_cast<ProcessWidget*>(ui->processPage);
+
     if (process) {
         process->setOpcUaService(ua);
 
@@ -57,6 +62,27 @@ MainWindow::MainWindow(QWidget *parent)
     if (dashboard) {
         dashboard->set_opcua_service(ua);
     }
+
+    connect(ua, &OpcUaService::mfgTempUpdated, this, [this](double temp){
+        if (temp >= kFireTestThreshold) {
+            if (!m_mfgFireTriggered) {
+                m_mfgFireTriggered = true;
+                requestEmergencyStopAll("MFG", temp);
+            }
+        } else {
+            m_mfgFireTriggered = false;
+        }
+    });
+    connect(ua, &OpcUaService::logTempUpdated, this, [this](double temp){
+        if (temp >= kFireTestThreshold) {
+            if (!m_logFireTriggered) {
+                m_logFireTriggered = true;
+                requestEmergencyStopAll("LOG", temp);
+            }
+        } else {
+            m_logFireTriggered = false;
+        }
+    });
 
 
     connect(ua, &OpcUaService::mfgAuthRequestReceived, this,
@@ -182,6 +208,8 @@ MainWindow::MainWindow(QWidget *parent)
         }
     });
 
+
+
     setupNavigation();
     moveToPage(PageType::Login);
 
@@ -254,6 +282,37 @@ void MainWindow::startOpcUaOnce()
         "/home/pi/MES/servers/certs/mes/key.der",
         "/home/pi/MES/servers/certs/mes/trust_log.der"
     );
+}
+
+void MainWindow::requestEmergencyStopAll(const QString &source, double temp)
+{
+    if (m_globalEmergencyStop)
+        return;
+
+    m_globalEmergencyStop = true;
+
+    qDebug() << "[MES] EMERGENCY STOP ALL:"
+             << "source =" << source
+             << "temp =" << temp;
+
+    m_environmentLogsService.insertLog(
+        source == "MFG" ? 2 : 1,
+        "TEMP",
+        QString::number(temp, 'f', 1),
+        QString("FIRE DETECTED: %1 temp=%2")
+            .arg(source)
+            .arg(QString::number(temp, 'f', 1))
+        );
+
+    if (ua) {
+        QMessageBox::critical(this, "화재 경고",
+                              QString("%1 온도가 %2°C로 감지되어 전체 공정을 정지했습니다.")
+                                  .arg(source)
+                                  .arg(QString::number(temp, 'f', 1)));
+        ua->mfgStopOrder();
+        ua->logStopMove();
+    }
+    clearActiveProduction();
 }
 
 void MainWindow::setupNavigation() {

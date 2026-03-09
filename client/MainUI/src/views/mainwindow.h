@@ -8,6 +8,7 @@
 #include "opcua_service.h"
 #include "auth_service.h"
 #include "../models/manufacture_model.h"
+#include "../services/environment_logs_service.h"
 
 QT_BEGIN_NAMESPACE
 namespace Ui { class MainWindow; }
@@ -38,9 +39,15 @@ private:
     QString m_activeRecipe;
     QList<RecipeItem> m_activeRecipeItems;
 
+    EnvironmentLogsService m_environmentLogsService;
+
     int m_lastProdCount = 0;
     int m_lastDefectCount = 0;
     int m_lastAttemptCount = 0;
+
+    bool m_mfgFireTriggered = false;
+    bool m_logFireTriggered = false;
+    bool m_globalEmergencyStop = false;
 
     bool m_materialStopRequested = false;
 
@@ -52,6 +59,7 @@ private:
     void moveToPage(PageType type);
     void requestMaterialStop(const QString &reason);
     void clearActiveProduction();
+    void requestEmergencyStopAll(const QString &source, double temp);
 };
 
 #endif
