@@ -16,10 +16,19 @@ struct DeliveryInfo {
     QString updated_at;
 };
 
+enum class DeliveryCompleteResult {
+    Success,
+    AlreadyDone,
+    NotEnoughStock,
+    NotFound,
+    DbError
+};
+
+
 class DeliveryService {
 public:
     static QList<ProductInfo> getProducts();
     static QList<CompanyInfo> getCustomers();
     static QList<DeliveryInfo> getDeliveries();
-    static bool completeDelivery(const QString &id);
+    static DeliveryCompleteResult completeDelivery(const QString &id);
 };

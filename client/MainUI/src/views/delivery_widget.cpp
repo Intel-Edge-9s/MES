@@ -1,13 +1,13 @@
 ﻿#include "delivery_widget.h"
 #include "ui_delivery_widget.h"
 #include "../services/delivery_service.h"
+#include <QMessageBox>
 
 DeliveryWidget::DeliveryWidget(QWidget *parent)
     : BasePageWidget(parent)
     , ui(new Ui::DeliveryWidget)
 {
     ui->setupUi(this);
-    ui->title_label->setText("Delivery List");
 
     setupTableConfigs();
     loadDeliveryData();
@@ -20,7 +20,7 @@ DeliveryWidget::~DeliveryWidget()
 
 void DeliveryWidget::setupTableConfigs()
 {
-    QStringList headers = {"Company", "Product", "Quantity", "Status", "Created at", "Updated at"};
+    QStringList headers = {"회사명", "제품명", "수량", "상태", "주문시간", "납품시간"};
     ui->delivery_table->setColumnCount(7); // 6 + 1 숨김(id)
     ui->delivery_table->setHorizontalHeaderLabels(headers);
     ui->delivery_table->horizontalHeader()->setSectionResizeMode(QHeaderView::Stretch);
@@ -65,27 +65,43 @@ void DeliveryWidget::on_create_delivery_button_clicked()
 
 void DeliveryWidget::on_complete_delivery_button_clicked()
 {
-    // 선택된 행 확인
     int row = ui->delivery_table->currentRow();
     if (row < 0) {
-        qDebug() << "완료할 항목을 선택해주세요.";
+        QMessageBox::warning(this, "납품 불가", "완료할 항목을 선택해주세요.");
         return;
     }
 
-    // 이미 완료된 항목 확인
-    QString status = ui->delivery_table->item(row, 3)->text();
-    if (status == "DONE") {
-        qDebug() << "이미 완료된 항목입니다.";
-        return;
-    }
-
-    // 숨겨진 컬럼에서 id 가져오기
     QString selected_id = ui->delivery_table->item(row, 6)->text();
+    const auto result = DeliveryService::completeDelivery(selected_id);
 
-    if (DeliveryService::completeDelivery(selected_id)) {
-        loadDeliveryData(); // 테이블 새로고침
+    switch (result) {
+    case DeliveryCompleteResult::Success:
+        QMessageBox::information(this, "납품 완료", "납품이 완료되었습니다.");
+        loadDeliveryData();
+        break;
+
+    case DeliveryCompleteResult::AlreadyDone:
+        QMessageBox::warning(this, "납품 불가", "이미 납품을 완료했습니다.");
+        loadDeliveryData();
+        break;
+
+    case DeliveryCompleteResult::NotEnoughStock:
+        QMessageBox::warning(this, "납품 불가", "생산품 재고가 부족하여 납품할 수 없습니다.");
+        break;
+
+    case DeliveryCompleteResult::NotFound:
+        QMessageBox::warning(this, "납품 불가", "선택한 납품 정보를 찾을 수 없습니다.");
+        loadDeliveryData();
+        break;
+
+    case DeliveryCompleteResult::DbError:
+    default:
+        QMessageBox::critical(this, "오류", "납품 처리 중 오류가 발생했습니다.");
+        break;
     }
 }
+
+
 
 void DeliveryWidget::on_Back_btn_clicked()
 {
