@@ -6,4 +6,5 @@ class DashboardService {
 public:
     static QList<InventoryInfo> getStorageCharts();
     static QList<LocationInfo> getLocations();
+    static QList<ProductionChartInfo> getProductionChart();
 };

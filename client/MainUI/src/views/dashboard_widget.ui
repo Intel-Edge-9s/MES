@@ -177,63 +177,21 @@
     <string>TextLabel</string>
    </property>
   </widget>
-  <widget class="QLabel" name="label">
-   <property name="geometry">
-    <rect>
-     <x>310</x>
-     <y>240</y>
-     <width>57</width>
-     <height>14</height>
-    </rect>
-   </property>
-   <property name="text">
-    <string>TextLabel</string>
-   </property>
-  </widget>
-  <widget class="QLabel" name="label_2">
-   <property name="geometry">
-    <rect>
-     <x>310</x>
-     <y>270</y>
-     <width>57</width>
-     <height>14</height>
-    </rect>
-   </property>
-   <property name="text">
-    <string>TextLabel</string>
-   </property>
-  </widget>
-  <widget class="QLabel" name="label_3">
-   <property name="geometry">
-    <rect>
-     <x>310</x>
-     <y>300</y>
-     <width>57</width>
-     <height>14</height>
-    </rect>
-   </property>
-   <property name="text">
-    <string>TextLabel</string>
-   </property>
-  </widget>
-  <widget class="QLabel" name="label_4">
-   <property name="geometry">
-    <rect>
-     <x>310</x>
-     <y>330</y>
-     <width>57</width>
-     <height>14</height>
-    </rect>
-   </property>
-   <property name="text">
-    <string>TextLabel</string>
-   </property>
-  </widget>
   <widget class="QWidget" name="conveyor_widget" native="true">
    <property name="geometry">
     <rect>
      <x>300</x>
      <y>350</y>
+     <width>241</width>
+     <height>80</height>
+    </rect>
+   </property>
+  </widget>
+  <widget class="QWidget" name="sensor_widget" native="true">
+   <property name="geometry">
+    <rect>
+     <x>299</x>
+     <y>250</y>
      <width>241</width>
      <height>80</height>
     </rect>

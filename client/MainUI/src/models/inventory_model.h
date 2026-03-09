@@ -16,3 +16,9 @@ struct InventoryInfo {
 struct LocationInfo {
     QString location;
 };
+
+struct ProductionChartInfo {
+    QString product_name;
+    QString date;
+    int prod_count;
+};
