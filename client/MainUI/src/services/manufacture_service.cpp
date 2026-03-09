@@ -6,27 +6,45 @@
 #include <QDebug>
 
 namespace {
-static QList<RecipeItem> buildRecipeItemsFromString(const QString &recipe)
-{
-    QList<RecipeItem> list;
+    static QList<RecipeItem> buildRecipeItemsFromString(const QString &recipe)
+    {
+        QList<RecipeItem> list;
 
-    const QStringList tokens = recipe.split(',', Qt::KeepEmptyParts);
-    for (int i = 0; i < 4; ++i) {
-        RecipeItem item;
-        item.itemCode = QString("s%1").arg(i + 1);
-        item.itemName = item.itemCode;
+        const QStringList tokens = recipe.split(',', Qt::KeepEmptyParts);
+        for (int i = 0; i < 4; ++i) {
+            RecipeItem item;
+            item.itemCode = QString("s%1").arg(i + 1);
+            item.itemName = item.itemCode;
 
-        const QString token = (i < tokens.size()) ? tokens[i].trimmed() : QString();
-        bool ok = false;
-        const int qty = token.toInt(&ok);
-        item.quantityRequired = (ok && qty > 0) ? qty : 0;
+            const QString token = (i < tokens.size()) ? tokens[i].trimmed() : QString();
+            bool ok = false;
+            const int qty = token.toInt(&ok);
+            item.quantityRequired = (ok && qty > 0) ? qty : 0;
 
-        list.append(item);
+            list.append(item);
+        }
+
+        return list;
     }
+}
 
-    return list;
+QList<RecipeItem> ManufactureService::parseRecipeString(const QString &recipe)
+{
+    return buildRecipeItemsFromString(recipe);
 }
+
+bool ManufactureService::consumeRecipeItems(const QString &productId, int producedDelta)
+{
+    Q_UNUSED(productId);
+    Q_UNUSED(producedDelta);
+    // 원재료 DB 반영은 LOG 서버 item stock 노드를 구독한 클라이언트가 수행한다.
+    // 직접 DB 차감은 하지 않는다.
+    return true;
 }
+
+// ====================
+// SELECT
+// ====================
 
 QList<ManufactureInfo> ManufactureService::getProducts() {
     QList<ManufactureInfo> list;
@@ -87,10 +105,6 @@ ProductionOrderTask ManufactureService::getProductionOrderById(const QString &or
     return task;
 }
 
-QList<RecipeItem> ManufactureService::parseRecipeString(const QString &recipe)
-{
-    return buildRecipeItemsFromString(recipe);
-}
 
 QList<RecipeItem> ManufactureService::getRecipeItemsByProductId(const QString &productId)
 {
@@ -138,6 +152,34 @@ QList<ManufactureScheduleInfo> ManufactureService::getSchedules() {
     return list;
 }
 
+ProductionOrderTask ManufactureService::getNextAutoPendingOrder() {
+    ProductionOrderTask task;
+    task.valid = false;
+
+    QSqlQuery query;
+    // 조건: PENDING 상태 중 order_count가 가장 적은 것 하나 (동률일 경우 먼저 생성된 것)
+    query.prepare("SELECT l.id, l.order_count, l.motor_speed, l.status, p.product_no, p.recipe "
+                  "FROM product_order_logs l "
+                  "JOIN product p ON l.product_id = p.id "
+                  "WHERE l.status = 'PENDING' "
+                  "ORDER BY l.order_count ASC, l.created_at ASC LIMIT 1");
+
+    if (query.exec() && query.next()) {
+        task.valid = true;
+        task.orderId = query.value("id").toString();
+        task.orderCount = query.value("order_count").toInt();
+        task.motorSpeed = query.value("motor_speed").toInt();
+        task.status = query.value("status").toString();
+        task.productNo = query.value("product_no").toInt();
+        task.recipe = query.value("recipe").toString();
+    }
+    return task;
+}
+
+// ====================
+// UPDATE
+// ====================
+
 bool ManufactureService::updateProductStock(const QString &product_id, int new_stock) {
     QSqlQuery query;
     query.prepare(
@@ -173,23 +215,6 @@ bool ManufactureService::markProductionOrderInProc(const QString &orderId)
     return query.numRowsAffected() > 0;
 }
 
-bool ManufactureService::markProductionOrderWaitMaterial(const QString &orderId)
-{
-    QSqlQuery query;
-    query.prepare(
-        "UPDATE product_order_logs "
-        "SET status = 'INPROC', updated_at = NOW() "
-        "WHERE id = :id");
-    query.bindValue(":id", orderId);
-
-    if (!query.exec()) {
-        qDebug() << "markProductionOrderWaitMaterial failed:" << query.lastError().text();
-        return false;
-    }
-
-    return true;
-}
-
 bool ManufactureService::markProductionOrderDone(const QString &orderId)
 {
     QSqlQuery query;
@@ -201,6 +226,23 @@ bool ManufactureService::markProductionOrderDone(const QString &orderId)
 
     if (!query.exec()) {
         qDebug() << "markProductionOrderDone failed:" << query.lastError().text();
+        return false;
+    }
+
+    return true;
+}
+
+bool ManufactureService::markProductionOrderWaitMaterial(const QString &orderId)
+{
+    QSqlQuery query;
+    query.prepare(
+        "UPDATE product_order_logs "
+        "SET status = 'INPROC', updated_at = NOW() "
+        "WHERE id = :id");
+    query.bindValue(":id", orderId);
+
+    if (!query.exec()) {
+        qDebug() << "markProductionOrderWaitMaterial failed:" << query.lastError().text();
         return false;
     }
 
@@ -248,14 +290,9 @@ bool ManufactureService::increaseProductStock(const QString &productId, int delt
     return true;
 }
 
-bool ManufactureService::consumeRecipeItems(const QString &productId, int producedDelta)
-{
-    Q_UNUSED(productId);
-    Q_UNUSED(producedDelta);
-    // 원재료 DB 반영은 LOG 서버 item stock 노드를 구독한 클라이언트가 수행한다.
-    // 직접 DB 차감은 하지 않는다.
-    return true;
-}
+// ====================
+// INSERT
+// ====================
 
 bool ManufactureService::createProductLog(const ProductionOrderTask &task)
 {
@@ -275,6 +312,10 @@ bool ManufactureService::createProductLog(const ProductionOrderTask &task)
 
     return true;
 }
+
+// ====================
+// DELETE
+// ====================
 
 bool ManufactureService::deleteSchedule(const QString &orderId) {
     QSqlQuery query;

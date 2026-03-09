@@ -49,7 +49,7 @@
     </rect>
    </property>
    <property name="text">
-    <string>Item Name</string>
+    <string>원재료명</string>
    </property>
   </widget>
   <widget class="QLabel" name="label">
@@ -62,7 +62,7 @@
     </rect>
    </property>
    <property name="text">
-    <string>Quantity</string>
+    <string>개수</string>
    </property>
   </widget>
   <widget class="QSpinBox" name="spinAmount">
@@ -85,7 +85,7 @@
     </rect>
    </property>
    <property name="text">
-    <string>Order Time</string>
+    <string>지시 날짜</string>
    </property>
   </widget>
   <widget class="QLabel" name="labelCurrentTime">
@@ -111,7 +111,7 @@
     </rect>
    </property>
    <property name="text">
-    <string>Arrival Due</string>
+    <string>입고 예정일</string>
    </property>
   </widget>
   <widget class="QDateTimeEdit" name="dateEditDue">

@@ -38,8 +38,14 @@
     </item>
     <item row="0" column="1">
      <widget class="QLabel" name="label">
+      <property name="font">
+       <font>
+        <pointsize>12</pointsize>
+        <bold>true</bold>
+       </font>
+      </property>
       <property name="text">
-       <string>Raw Material Stock Status</string>
+       <string>원재료 현황</string>
       </property>
      </widget>
     </item>
@@ -70,8 +76,14 @@
     </item>
     <item row="0" column="0">
      <widget class="QLabel" name="label_2">
+      <property name="font">
+       <font>
+        <pointsize>12</pointsize>
+        <bold>true</bold>
+       </font>
+      </property>
       <property name="text">
-       <string>Raw Material Order Status</string>
+       <string>원재료 입고 스케줄 테이블</string>
       </property>
      </widget>
     </item>
@@ -80,14 +92,14 @@
       <item>
        <widget class="QPushButton" name="pushButton">
         <property name="text">
-         <string>Create Order</string>
+         <string>스케줄 생산</string>
         </property>
        </widget>
       </item>
       <item>
        <widget class="QPushButton" name="cancel_order_button">
         <property name="text">
-         <string>Cancel Order</string>
+         <string>스케줄 삭제</string>
         </property>
        </widget>
       </item>

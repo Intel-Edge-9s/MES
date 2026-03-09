@@ -19,44 +19,30 @@
      <x>30</x>
      <y>20</y>
      <width>421</width>
-     <height>241</height>
+     <height>231</height>
     </rect>
    </property>
    <layout class="QGridLayout" name="gridLayout">
-    <item row="0" column="0">
-     <widget class="QLabel" name="label_product">
-      <property name="text">
-       <string>Product</string>
-      </property>
-     </widget>
-    </item>
-    <item row="0" column="1">
-     <widget class="QComboBox" name="product_combo"/>
-    </item>
-    <item row="1" column="0">
-     <widget class="QLabel" name="label_order_count">
-      <property name="text">
-       <string>Order Count</string>
-      </property>
-     </widget>
-    </item>
     <item row="1" column="1">
      <widget class="QLineEdit" name="order_count_edit"/>
     </item>
-    <item row="2" column="0">
-     <widget class="QLabel" name="label_motor_speed">
+    <item row="0" column="0">
+     <widget class="QLabel" name="label_product">
       <property name="text">
-       <string>Motor Speed</string>
+       <string>제품명</string>
       </property>
      </widget>
     </item>
     <item row="2" column="1">
      <widget class="QLineEdit" name="motor_speed_edit"/>
     </item>
-    <item row="3" column="0">
-     <widget class="QLabel" name="label_deadline">
+    <item row="0" column="1">
+     <widget class="QComboBox" name="product_combo"/>
+    </item>
+    <item row="2" column="0">
+     <widget class="QLabel" name="label_motor_speed">
       <property name="text">
-       <string>Deadline</string>
+       <string>모터 속도</string>
       </property>
      </widget>
     </item>
@@ -67,21 +53,52 @@
       </property>
      </widget>
     </item>
-    <item row="4" column="0">
-     <widget class="QPushButton" name="confirm_button">
+    <item row="3" column="0">
+     <widget class="QLabel" name="label_deadline">
       <property name="text">
-       <string>Confirm</string>
+       <string>마감 날짜</string>
       </property>
      </widget>
     </item>
-    <item row="4" column="1">
-     <widget class="QPushButton" name="cancel_button">
+    <item row="1" column="0">
+     <widget class="QLabel" name="label_order_count">
       <property name="text">
-       <string>Cancel</string>
+       <string>생산 개수</string>
       </property>
      </widget>
     </item>
    </layout>
+  </widget>
+  <widget class="QPushButton" name="cancel_button">
+   <property name="geometry">
+    <rect>
+     <x>340</x>
+     <y>270</y>
+     <width>101</width>
+     <height>31</height>
+    </rect>
+   </property>
+   <property name="text">
+    <string>취소</string>
+   </property>
+  </widget>
+  <widget class="QPushButton" name="confirm_button">
+   <property name="geometry">
+    <rect>
+     <x>40</x>
+     <y>270</y>
+     <width>271</width>
+     <height>31</height>
+    </rect>
+   </property>
+   <property name="font">
+    <font>
+     <bold>true</bold>
+    </font>
+   </property>
+   <property name="text">
+    <string>확인</string>
+   </property>
   </widget>
  </widget>
  <resources/>

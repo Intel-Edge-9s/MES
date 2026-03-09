@@ -26,6 +26,7 @@ private slots:
     void on_edit_stock_button_clicked();
     void on_create_schedule_button_clicked();
     void on_cancel_schedule_button_clicked();
+    void on_auto_button_clicked();
 
 private:
     Ui::ManufactureWidget *ui;
@@ -37,8 +38,13 @@ private:
     void setupScheduleTableConfigs();
     void loadManufactureData();
     void loadScheduleData();
+
     void setupOpcBindings();
     bool m_opcBound = false; // 중복 연결 방지 플래그
+
+    void tryProcessNextAutoTask(); // 다음 오더 실행 시도 함수
+    bool m_isAutoMode = false;     // 오토 모드 플래그
+    
 
 protected:
     void showEvent(QShowEvent *event) override;

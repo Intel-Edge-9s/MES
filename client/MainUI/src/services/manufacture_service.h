@@ -10,6 +10,7 @@ public:
     static ProductionOrderTask getProductionOrderById(const QString &orderId);
     static QList<RecipeItem> getRecipeItemsByProductId(const QString &productId);
     static QList<RecipeItem> parseRecipeString(const QString &recipe);
+    static ProductionOrderTask getNextAutoPendingOrder();
 
     // UPDATE
     static bool markProductionOrderInProc(const QString &orderId);

@@ -25,6 +25,12 @@
    <layout class="QGridLayout" name="gridLayout">
     <item row="0" column="0">
      <widget class="QLabel" name="label">
+      <property name="font">
+       <font>
+        <pointsize>12</pointsize>
+        <bold>true</bold>
+       </font>
+      </property>
       <property name="text">
        <string>제품 현황</string>
       </property>
@@ -35,7 +41,7 @@
       <item>
        <widget class="QPushButton" name="edit_stock_button">
         <property name="text">
-         <string>Edit Stock</string>
+         <string>임의 재고 수정</string>
         </property>
        </widget>
       </item>
@@ -81,8 +87,14 @@
    <layout class="QGridLayout" name="gridLayout_2">
     <item row="0" column="0">
      <widget class="QLabel" name="label_2">
+      <property name="font">
+       <font>
+        <pointsize>12</pointsize>
+        <bold>true</bold>
+       </font>
+      </property>
       <property name="text">
-       <string>Manufacture Schedule</string>
+       <string>제품 생산 스케줄 테이블</string>
       </property>
      </widget>
     </item>
@@ -91,14 +103,14 @@
       <item>
        <widget class="QPushButton" name="create_schedule_button">
         <property name="text">
-         <string>Create Schedule</string>
+         <string>스케줄 생성</string>
         </property>
        </widget>
       </item>
       <item>
        <widget class="QPushButton" name="cancel_schedule_button">
         <property name="text">
-         <string>Cancel Schedule</string>
+         <string>스케줄 삭제</string>
         </property>
        </widget>
       </item>

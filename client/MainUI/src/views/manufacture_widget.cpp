@@ -221,4 +221,56 @@ void ManufactureWidget::setupOpcBindings()
     connect(ua, &OpcUaService::mfgStatusUpdated, this, [this](){
         loadScheduleData();
     });
+    
+}
+
+void ManufactureWidget::on_auto_button_clicked()
+{
+    m_isAutoMode = !m_isAutoMode;
+
+    if (m_isAutoMode) {
+        ui->auto_button->setText("AutoMode : ON");
+        ui->auto_button->setStyleSheet("background-color: #2ecc71; color: white;"); // 녹색 강조
+        // 모드 켜자마자 장비가 놀고 있다면 바로 시작 시도
+        tryProcessNextAutoTask();
+    } else {
+        ui->auto_button->setText("AutoMode : OFF");
+        ui->auto_button->setStyleSheet(""); // 기본 스타일
+    }
+}
+
+void ManufactureWidget::tryProcessNextAutoTask()
+{
+    if (!m_isAutoMode) return;
+
+    auto *mw = qobject_cast<MainWindow*>(window());
+    auto *ua = mw ? mw->opcUaService() : nullptr;
+    if (!ua) return;
+
+    // A. DB에서 최우선 순위(PENDING & Lowest count) 오더 가져오기
+    auto task = ManufactureService::getNextAutoPendingOrder();
+
+    if (!task.valid) {
+        qDebug() << "[AUTO] No pending orders found.";
+        return;
+    }
+
+    // B. 오더 유효성 검사 (레시피 유무 등)
+    if (task.recipe.trimmed().isEmpty()) {
+        qDebug() << "[AUTO] Task" << task.orderId << "has no recipe. Skipping.";
+        return;
+    }
+
+    // C. 오더 상태 변경 (PENDING -> INPROC) 및 로그 생성
+    if (!ManufactureService::markProductionOrderInProc(task.orderId)) return;
+    if (!ManufactureService::createProductLog(task)) return;
+
+    // D. 장비에 작업 지시 (ProcessWidget 로직 재사용)
+    ua->mfgWriteSpeed(task.motorSpeed <= 0 ? 100.0 : task.motorSpeed);
+    ua->mfgStartOrder(task.orderId, static_cast<quint16>(task.productNo), static_cast<quint32>(task.orderCount));
+
+    qDebug() << "[AUTO] Successfully started order:" << task.orderId;
+    
+    // UI 테이블 갱신
+    loadScheduleData();
 }
