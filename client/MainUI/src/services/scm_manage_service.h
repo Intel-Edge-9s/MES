@@ -1,11 +1,8 @@
-﻿#ifndef SCM_MANAGE_SERVICE_H
-#define SCM_MANAGE_SERVICE_H
-
+#pragma once
 #include "../models/inventory_model.h"
 #include "../models/inventory_order_logs_model.h"
 #include <QString>
 #include <QList>
-#include <QVariant>
 
 struct InboundOrderTask {
     bool valid = false;
@@ -19,10 +16,11 @@ struct InboundOrderTask {
     int warehouseNo = 0;
 };
 
-struct WarehouseStockSnapshot {
-    quint32 wh1 = 0;
-    quint32 wh2 = 0;
-    quint32 wh3 = 0;
+struct RawMaterialStockSnapshot {
+    quint32 s1 = 0;
+    quint32 s2 = 0;
+    quint32 s3 = 0;
+    quint32 s4 = 0;
 };
 
 class ScmManageService
@@ -35,11 +33,11 @@ public:
 
     static InboundOrderTask getInboundOrderTaskById(const QString& orderId);
     static int warehouseNoFromLocation(const QString& location);
-    static WarehouseStockSnapshot getWarehouseStockSnapshot();
 
     static bool markOrderInProc(const QString& orderId);
     static bool markOrderDone(const QString& orderId);
     static bool increaseInventoryByOrderId(const QString& orderId, int delta);
-};
 
-#endif // SCM_MANAGE_SERVICE_H
+    static RawMaterialStockSnapshot getRawMaterialStockSnapshot();
+    static bool updateInventoryStockByItemCode(const QString &itemCode, int newStock);
+};

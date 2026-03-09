@@ -65,8 +65,21 @@ static const char *LOG_WH_LOW[3]       = {"log/wh1/low_stock","log/wh2/low_stock
 
 static const char *LOG_MOVE_M          = "log/Move";
 static const char *LOG_STOPMOVE_M      = "log/StopMove";
-static const char *LOG_INITSTOCKS_M    = "log/InitStocks";
 static const char *LOG_CONSUME_M       = "log/Consume";
+static const char *LOG_INIT_ITEM_STOCKS_M = "log/InitItemStocks";
+static const char *LOG_ITEM_STOCK[4] = {
+    "log/items/s1/stock",
+    "log/items/s2/stock",
+    "log/items/s3/stock",
+    "log/items/s4/stock"
+};
+static const char *LOG_ITEM_LOW[4] = {
+    "log/items/s1/low_stock",
+    "log/items/s2/low_stock",
+    "log/items/s3/low_stock",
+    "log/items/s4/low_stock"
+};
+
 // MFG AUTH
 static const char *MFG_AUTH_REQ_ID       = "mfg/auth/request_id";
 static const char *MFG_AUTH_REQ_PW       = "mfg/auth/request_pw";
@@ -99,11 +112,12 @@ enum class TagKind {
     MFG_PROD_COUNT, MFG_DEFECT_COUNT, MFG_ATTEMPT_COUNT, MFG_DEFECT_CODE,
     WH_LOADING_1, WH_LOADING_2, WH_LOADING_3,
     WH_LOADED_1,  WH_LOADED_2,  WH_LOADED_3,
-    WH_QTY_1,     WH_QTY_2,     WH_QTY_3,
-    WH_LOW_1,     WH_LOW_2,     WH_LOW_3,
     MFG_AUTH_PENDING,
     LOG_AUTH_PENDING,
     LOG_ARRIVAL_PENDING,
+    LOG_ITEM_STOCK_1, LOG_ITEM_STOCK_2, LOG_ITEM_STOCK_3, LOG_ITEM_STOCK_4,
+    LOG_ITEM_LOW_1, LOG_ITEM_LOW_2, LOG_ITEM_LOW_3, LOG_ITEM_LOW_4,
+    WH_QTY_1, WH_QTY_2, WH_QTY_3,
 };
 
 struct MonTag {
@@ -315,25 +329,26 @@ public slots:
             emit errorOccurred("logStopMove", "call failed: " + sc(rc));
     }
 
-    void logConsume(int wh1to3, quint32 qty) {
+
+    void logConsumeItem(const QString &itemCode, quint32 qty) {
         QMutexLocker lk(&mu);
         if(!log.client || !log.connected) {
-            emit errorOccurred("logConsume", "LOG not connected");
-            return;
-        }
-        if(wh1to3 < 1 || wh1to3 > 3) {
-            emit errorOccurred("logConsume", "wh out of range");
+            emit errorOccurred("logConsumeItem", "LOG not connected");
             return;
         }
 
-        UA_UInt16 wh = (UA_UInt16)wh1to3;
-        UA_UInt32 q  = (UA_UInt32)qty;
+        QByteArray ba = itemCode.toUtf8();
+        UA_String s;
+        s.length = (size_t)ba.size();
+        s.data = (UA_Byte*)ba.data();
+
+        UA_UInt32 q = (UA_UInt32)qty;
 
         UA_Variant in[2];
         UA_Variant_init(&in[0]);
         UA_Variant_init(&in[1]);
-        UA_Variant_setScalar(&in[0], &wh, &UA_TYPES[UA_TYPES_UINT16]);
-        UA_Variant_setScalar(&in[1], &q,  &UA_TYPES[UA_TYPES_UINT32]);
+        UA_Variant_setScalar(&in[0], &s, &UA_TYPES[UA_TYPES_STRING]);
+        UA_Variant_setScalar(&in[1], &q, &UA_TYPES[UA_TYPES_UINT32]);
 
         UA_StatusCode rc = UA_Client_call(log.client,
                                           UA_NODEID_NUMERIC(0, UA_NS0ID_OBJECTSFOLDER),
@@ -341,36 +356,36 @@ public slots:
                                           2, in,
                                           0, nullptr);
         if(rc != UA_STATUSCODE_GOOD)
-            emit errorOccurred("logConsume", "call failed: " + sc(rc));
+            emit errorOccurred("logConsumeItem", "call failed: " + sc(rc));
     }
 
-    void logInitStocks(quint32 wh1Qty, quint32 wh2Qty, quint32 wh3Qty) {
+    void logInitItemStocks(quint32 s1, quint32 s2, quint32 s3, quint32 s4) {
         QMutexLocker lk(&mu);
         if(!log.client || !log.connected) {
-            emit errorOccurred("logInitStocks", "LOG not connected");
+            emit errorOccurred("logInitItemStocks", "LOG not connected");
             return;
         }
 
-        UA_UInt32 q1 = (UA_UInt32)wh1Qty;
-        UA_UInt32 q2 = (UA_UInt32)wh2Qty;
-        UA_UInt32 q3 = (UA_UInt32)wh3Qty;
-
-        UA_Variant in[3];
-        UA_Variant_init(&in[0]);
-        UA_Variant_init(&in[1]);
-        UA_Variant_init(&in[2]);
-        UA_Variant_setScalar(&in[0], &q1, &UA_TYPES[UA_TYPES_UINT32]);
-        UA_Variant_setScalar(&in[1], &q2, &UA_TYPES[UA_TYPES_UINT32]);
-        UA_Variant_setScalar(&in[2], &q3, &UA_TYPES[UA_TYPES_UINT32]);
+        UA_UInt32 v1 = s1, v2 = s2, v3 = s3, v4 = s4;
+        UA_Variant in[4];
+        for(int i=0;i<4;i++) UA_Variant_init(&in[i]);
+        UA_Variant_setScalar(&in[0], &v1, &UA_TYPES[UA_TYPES_UINT32]);
+        UA_Variant_setScalar(&in[1], &v2, &UA_TYPES[UA_TYPES_UINT32]);
+        UA_Variant_setScalar(&in[2], &v3, &UA_TYPES[UA_TYPES_UINT32]);
+        UA_Variant_setScalar(&in[3], &v4, &UA_TYPES[UA_TYPES_UINT32]);
 
         UA_StatusCode rc = UA_Client_call(log.client,
                                           UA_NODEID_NUMERIC(0, UA_NS0ID_OBJECTSFOLDER),
-                                          nid(LOG_INITSTOCKS_M),
-                                          3, in,
+                                          nid(LOG_INIT_ITEM_STOCKS_M),
+                                          4, in,
                                           0, nullptr);
+
         if(rc != UA_STATUSCODE_GOOD)
-            emit errorOccurred("logInitStocks", "call failed: " + sc(rc));
+            emit errorOccurred("logInitItemStocks", "call failed: " + sc(rc));
     }
+
+
+
     void logWriteArrivalResult(bool ok, const QString &msg) {
         QMutexLocker lk(&mu);
         if(!log.client || !log.connected) {
@@ -493,6 +508,8 @@ signals:
     void logWhLoadedUpdated(int wh1to3, bool loaded);
     void logWhQtyUpdated(int wh1to3, quint32 qty);
     void logWhLowStockUpdated(int wh1to3, bool low);
+    void logItemStockUpdated(const QString &itemCode, quint32 stock);
+    void logItemLowStockUpdated(const QString &itemCode, bool low);
 
     void mfgAuthRequestReceived(const QString &id, const QString &pw);
     void logAuthRequestReceived(const QString &id, const QString &pw);
@@ -713,6 +730,10 @@ private:
             if(tag->kind == TagKind::WH_QTY_1) emit self->logWhQtyUpdated(1, v);
             else if(tag->kind == TagKind::WH_QTY_2) emit self->logWhQtyUpdated(2, v);
             else if(tag->kind == TagKind::WH_QTY_3) emit self->logWhQtyUpdated(3, v);
+            else if(tag->kind == TagKind::LOG_ITEM_STOCK_1) emit self->logItemStockUpdated("s1", v);
+            else if(tag->kind == TagKind::LOG_ITEM_STOCK_2) emit self->logItemStockUpdated("s2", v);
+            else if(tag->kind == TagKind::LOG_ITEM_STOCK_3) emit self->logItemStockUpdated("s3", v);
+            else if(tag->kind == TagKind::LOG_ITEM_STOCK_4) emit self->logItemStockUpdated("s4", v);
             return;
         }
 
@@ -740,6 +761,10 @@ private:
                 if(b) self->emitLogArrivalRequest();
                 return;
             }
+            if(tag->kind == TagKind::LOG_ITEM_LOW_1) { emit self->logItemLowStockUpdated("s1", b); return; }
+            if(tag->kind == TagKind::LOG_ITEM_LOW_2) { emit self->logItemLowStockUpdated("s2", b); return; }
+            if(tag->kind == TagKind::LOG_ITEM_LOW_3) { emit self->logItemLowStockUpdated("s3", b); return; }
+            if(tag->kind == TagKind::LOG_ITEM_LOW_4) { emit self->logItemLowStockUpdated("s4", b); return; }
             switch(tag->kind) {
             case TagKind::WH_LOADING_1: emit self->logWhLoadingUpdated(1, b); break;
             case TagKind::WH_LOADING_2: emit self->logWhLoadingUpdated(2, b); break;
@@ -749,9 +774,7 @@ private:
             case TagKind::WH_LOADED_2:  emit self->logWhLoadedUpdated(2, b); break;
             case TagKind::WH_LOADED_3:  emit self->logWhLoadedUpdated(3, b); break;
 
-            case TagKind::WH_LOW_1:     emit self->logWhLowStockUpdated(1, b); break;
-            case TagKind::WH_LOW_2:     emit self->logWhLowStockUpdated(2, b); break;
-            case TagKind::WH_LOW_3:     emit self->logWhLowStockUpdated(3, b); break;
+
             default: break;
             }
             return;
@@ -1030,15 +1053,21 @@ private:
             addMon(c, nid(LOG_WH_LOADED[1]),  TagKind::WH_LOADED_2);
             addMon(c, nid(LOG_WH_LOADED[2]),  TagKind::WH_LOADED_3);
 
-            addMon(c, nid(LOG_WH_QTY[0]),     TagKind::WH_QTY_1);
-            addMon(c, nid(LOG_WH_QTY[1]),     TagKind::WH_QTY_2);
-            addMon(c, nid(LOG_WH_QTY[2]),     TagKind::WH_QTY_3);
-
-            addMon(c, nid(LOG_WH_LOW[0]),     TagKind::WH_LOW_1);
-            addMon(c, nid(LOG_WH_LOW[1]),     TagKind::WH_LOW_2);
-            addMon(c, nid(LOG_WH_LOW[2]),     TagKind::WH_LOW_3);
             addMon(c, nid(LOG_AUTH_REQ_PENDING), TagKind::LOG_AUTH_PENDING);
             addMon(c, nid(LOG_ARRIVAL_PENDING), TagKind::LOG_ARRIVAL_PENDING);
+            addMon(c, nid(LOG_WH_QTY[0]), TagKind::WH_QTY_1);
+            addMon(c, nid(LOG_WH_QTY[1]), TagKind::WH_QTY_2);
+            addMon(c, nid(LOG_WH_QTY[2]), TagKind::WH_QTY_3);
+
+            addMon(c, nid(LOG_ITEM_STOCK[0]), TagKind::LOG_ITEM_STOCK_1);
+            addMon(c, nid(LOG_ITEM_STOCK[1]), TagKind::LOG_ITEM_STOCK_2);
+            addMon(c, nid(LOG_ITEM_STOCK[2]), TagKind::LOG_ITEM_STOCK_3);
+            addMon(c, nid(LOG_ITEM_STOCK[3]), TagKind::LOG_ITEM_STOCK_4);
+
+            addMon(c, nid(LOG_ITEM_LOW[0]), TagKind::LOG_ITEM_LOW_1);
+            addMon(c, nid(LOG_ITEM_LOW[1]), TagKind::LOG_ITEM_LOW_2);
+            addMon(c, nid(LOG_ITEM_LOW[2]), TagKind::LOG_ITEM_LOW_3);
+            addMon(c, nid(LOG_ITEM_LOW[3]), TagKind::LOG_ITEM_LOW_4);
         }
     }
 
@@ -1095,6 +1124,8 @@ OpcUaService::OpcUaService(QObject *parent) : QObject(parent) {
     connect(m_worker, &Worker::logWhLoadedUpdated, this, &OpcUaService::logWhLoadedUpdated);
     connect(m_worker, &Worker::logWhQtyUpdated, this, &OpcUaService::logWhQtyUpdated);
     connect(m_worker, &Worker::logWhLowStockUpdated, this, &OpcUaService::logWhLowStockUpdated);
+    connect(m_worker, &Worker::logItemStockUpdated, this, &OpcUaService::logItemStockUpdated);
+    connect(m_worker, &Worker::logItemLowStockUpdated, this, &OpcUaService::logItemLowStockUpdated);
 
     connect(m_worker, &Worker::mfgAuthRequestReceived, this, &OpcUaService::mfgAuthRequestReceived);
     connect(m_worker, &Worker::logAuthRequestReceived, this, &OpcUaService::logAuthRequestReceived);
@@ -1193,19 +1224,21 @@ void OpcUaService::logStopMove() {
     QMetaObject::invokeMethod(m_worker, "logStopMove", Qt::QueuedConnection);
 }
 
-void OpcUaService::logConsume(int wh1to3, quint32 qty) {
+
+void OpcUaService::logConsumeItem(const QString &itemCode, quint32 qty) {
     start();
-    QMetaObject::invokeMethod(m_worker, "logConsume", Qt::QueuedConnection,
-                              Q_ARG(int, wh1to3),
+    QMetaObject::invokeMethod(m_worker, "logConsumeItem", Qt::QueuedConnection,
+                              Q_ARG(QString, itemCode),
                               Q_ARG(quint32, qty));
 }
 
-void OpcUaService::logInitStocks(quint32 wh1Qty, quint32 wh2Qty, quint32 wh3Qty) {
+void OpcUaService::logInitItemStocks(quint32 s1, quint32 s2, quint32 s3, quint32 s4) {
     start();
-    QMetaObject::invokeMethod(m_worker, "logInitStocks", Qt::QueuedConnection,
-                              Q_ARG(quint32, wh1Qty),
-                              Q_ARG(quint32, wh2Qty),
-                              Q_ARG(quint32, wh3Qty));
+    QMetaObject::invokeMethod(m_worker, "logInitItemStocks", Qt::QueuedConnection,
+                              Q_ARG(quint32, s1),
+                              Q_ARG(quint32, s2),
+                              Q_ARG(quint32, s3),
+                              Q_ARG(quint32, s4));
 }
 
 void OpcUaService::mfgSendAuthResult(bool ok) {

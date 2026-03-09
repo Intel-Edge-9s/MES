@@ -25,6 +25,7 @@ struct ProductionOrderTask {
     QString productId;
     QString productCode;
     QString productName;
+    QString recipe;
     int orderCount = 0;
     int motorSpeed = 100;
     QString status;

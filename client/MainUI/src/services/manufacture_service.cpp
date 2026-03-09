@@ -1,19 +1,37 @@
 #include "manufacture_service.h"
 #include "../core/user_session.h"
 #include <QRegularExpression>
-#include <QSqlDatabase>
 #include <QSqlError>
 #include <QSqlQuery>
 #include <QDebug>
 
-// ==============================
-// SELECT
-// ==============================
+namespace {
+static QList<RecipeItem> buildRecipeItemsFromString(const QString &recipe)
+{
+    QList<RecipeItem> list;
+
+    const QStringList tokens = recipe.split(',', Qt::KeepEmptyParts);
+    for (int i = 0; i < 4; ++i) {
+        RecipeItem item;
+        item.itemCode = QString("s%1").arg(i + 1);
+        item.itemName = item.itemCode;
+
+        const QString token = (i < tokens.size()) ? tokens[i].trimmed() : QString();
+        bool ok = false;
+        const int qty = token.toInt(&ok);
+        item.quantityRequired = (ok && qty > 0) ? qty : 0;
+
+        list.append(item);
+    }
+
+    return list;
+}
+}
 
 QList<ManufactureInfo> ManufactureService::getProducts() {
     QList<ManufactureInfo> list;
     QSqlQuery query(
-        "SELECT id, product_code, product_name, product_stock, description " 
+        "SELECT id, product_code, product_name, product_stock, description "
         "FROM product");
 
     while (query.next()) {
@@ -35,7 +53,7 @@ ProductionOrderTask ManufactureService::getProductionOrderById(const QString &or
     QSqlQuery query;
     query.prepare(
         "SELECT o.id, o.product_id, o.order_count, o.motor_speed, o.status, "
-        "p.product_code, p.product_name "
+        "p.product_code, p.product_name, p.recipe "
         "FROM product_order_logs o "
         "JOIN product p ON o.product_id = p.id "
         "WHERE o.id = :id "
@@ -55,6 +73,7 @@ ProductionOrderTask ManufactureService::getProductionOrderById(const QString &or
     task.productId = query.value("product_id").toString();
     task.productCode = query.value("product_code").toString();
     task.productName = query.value("product_name").toString();
+    task.recipe = query.value("recipe").toString();
     task.orderCount = query.value("order_count").toInt();
     task.motorSpeed = query.value("motor_speed").toInt();
     task.status = query.value("status").toString();
@@ -68,41 +87,30 @@ ProductionOrderTask ManufactureService::getProductionOrderById(const QString &or
     return task;
 }
 
+QList<RecipeItem> ManufactureService::parseRecipeString(const QString &recipe)
+{
+    return buildRecipeItemsFromString(recipe);
+}
+
 QList<RecipeItem> ManufactureService::getRecipeItemsByProductId(const QString &productId)
 {
-    QList<RecipeItem> list;
-
     QSqlQuery query;
     query.prepare(
-        "SELECT pi.item_id, i.item_code, i.item_name, pi.quantity_required, i.location "
-        "FROM product_items pi "
-        "JOIN inventory i ON pi.item_id = i.id "
-        "WHERE pi.product_id = :productId");
+        "SELECT recipe "
+        "FROM product "
+        "WHERE id = :productId "
+        "LIMIT 1");
     query.bindValue(":productId", productId);
 
     if (!query.exec()) {
         qDebug() << "getRecipeItemsByProductId failed:" << query.lastError().text();
-        return list;
+        return {};
     }
 
-    while (query.next()) {
-        RecipeItem item;
-        item.itemId = query.value("item_id").toString();
-        item.itemCode = query.value("item_code").toString();
-        item.itemName = query.value("item_name").toString();
-        item.quantityRequired = query.value("quantity_required").toInt();
-        item.location = query.value("location").toString();
+    if (!query.next())
+        return {};
 
-        const QString loc = item.location.trimmed().toUpper();
-        if (loc == "WH-A01") item.warehouseNo = 1;
-        else if (loc == "WH-B02") item.warehouseNo = 2;
-        else if (loc == "WH-C03") item.warehouseNo = 3;
-        else item.warehouseNo = 0;
-
-        list.append(item);
-    }
-
-    return list;
+    return buildRecipeItemsFromString(query.value("recipe").toString());
 }
 
 QList<ManufactureScheduleInfo> ManufactureService::getSchedules() {
@@ -129,10 +137,6 @@ QList<ManufactureScheduleInfo> ManufactureService::getSchedules() {
     }
     return list;
 }
-
-// ==============================
-// UPDATE
-// ==============================
 
 bool ManufactureService::updateProductStock(const QString &product_id, int new_stock) {
     QSqlQuery query;
@@ -174,7 +178,7 @@ bool ManufactureService::markProductionOrderWaitMaterial(const QString &orderId)
     QSqlQuery query;
     query.prepare(
         "UPDATE product_order_logs "
-        "SET status = 'WAIT_MAT', updated_at = NOW() "
+        "SET status = 'INPROC', updated_at = NOW() "
         "WHERE id = :id");
     query.bindValue(":id", orderId);
 
@@ -246,47 +250,12 @@ bool ManufactureService::increaseProductStock(const QString &productId, int delt
 
 bool ManufactureService::consumeRecipeItems(const QString &productId, int producedDelta)
 {
-    if (producedDelta <= 0) return true;
-
-    const auto recipe = getRecipeItemsByProductId(productId);
-    if (recipe.isEmpty()) {
-        qDebug() << "consumeRecipeItems: recipe empty for productId =" << productId;
-        return false;
-    }
-
-    QSqlDatabase db = QSqlDatabase::database();
-    if (!db.transaction()) {
-        qDebug() << "consumeRecipeItems transaction start failed";
-        return false;
-    }
-
-    for (const auto &item : recipe) {
-        const int consumeQty = item.quantityRequired * producedDelta;
-
-        QSqlQuery query(db);
-        query.prepare(
-            "UPDATE inventory "
-            "SET current_stock = COALESCE(current_stock, 0) - :consumeQty "
-            "WHERE id = :itemId "
-            "AND COALESCE(current_stock, 0) >= :consumeQty");
-        query.bindValue(":consumeQty", consumeQty);
-        query.bindValue(":itemId", item.itemId);
-
-        if (!query.exec() || query.numRowsAffected() <= 0) {
-            qDebug() << "consumeRecipeItems failed for item =" << item.itemCode
-                     << "err =" << query.lastError().text();
-            db.rollback();
-            return false;
-        }
-    }
-
-    return db.commit();
+    Q_UNUSED(productId);
+    Q_UNUSED(producedDelta);
+    // 원재료 DB 반영은 LOG 서버 item stock 노드를 구독한 클라이언트가 수행한다.
+    // 직접 DB 차감은 하지 않는다.
+    return true;
 }
-
-
-// ==============================
-// INSERT
-// ==============================
 
 bool ManufactureService::createProductLog(const ProductionOrderTask &task)
 {
@@ -306,11 +275,6 @@ bool ManufactureService::createProductLog(const ProductionOrderTask &task)
 
     return true;
 }
-
-// ==============================
-// DELETE
-// ==============================
-
 
 bool ManufactureService::deleteSchedule(const QString &orderId) {
     QSqlQuery query;

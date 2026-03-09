@@ -27,6 +27,7 @@ private:
 
     QHash<int, QString> m_activeOrderIdByWh;
     QHash<int, quint32> m_lastQtyByWh;
+    QHash<int, bool> m_loadedByWh;
     bool m_opcBound = false;
 
     void setupStockStatusTableConfigs();

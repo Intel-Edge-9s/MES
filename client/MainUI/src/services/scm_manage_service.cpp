@@ -1,4 +1,4 @@
-﻿#include "scm_manage_service.h"
+#include "scm_manage_service.h"
 #include "../core/user_session.h"
 #include <QSqlQuery>
 #include <QSqlError>
@@ -202,25 +202,42 @@ bool ScmManageService::increaseInventoryByOrderId(const QString& orderId, int de
     return db.commit();
 }
 
-
-WarehouseStockSnapshot ScmManageService::getWarehouseStockSnapshot()
+RawMaterialStockSnapshot ScmManageService::getRawMaterialStockSnapshot()
 {
-    WarehouseStockSnapshot snap;
+    RawMaterialStockSnapshot snap;
 
     QSqlQuery query(
-        "SELECT location, COALESCE(SUM(current_stock), 0) AS qty "
+        "SELECT LOWER(item_code) AS item_code, COALESCE(current_stock, 0) AS qty "
         "FROM inventory "
-        "GROUP BY location");
+        "WHERE LOWER(item_code) IN ('s1', 's2', 's3', 's4')");
 
     while (query.next()) {
-        const QString location = query.value("location").toString().trimmed().toUpper();
+        const QString itemCode = query.value("item_code").toString().trimmed().toLower();
         const quint32 qty = query.value("qty").toUInt();
 
-        const int wh = warehouseNoFromLocation(location);
-        if (wh == 1) snap.wh1 += qty;
-        else if (wh == 2) snap.wh2 += qty;
-        else if (wh == 3) snap.wh3 += qty;
+        if (itemCode == "s1") snap.s1 = qty;
+        else if (itemCode == "s2") snap.s2 = qty;
+        else if (itemCode == "s3") snap.s3 = qty;
+        else if (itemCode == "s4") snap.s4 = qty;
     }
 
     return snap;
+}
+
+bool ScmManageService::updateInventoryStockByItemCode(const QString &itemCode, int newStock)
+{
+    QSqlQuery query;
+    query.prepare(
+        "UPDATE inventory "
+        "SET current_stock = :newStock "
+        "WHERE LOWER(item_code) = LOWER(:itemCode)");
+    query.bindValue(":newStock", newStock);
+    query.bindValue(":itemCode", itemCode);
+
+    if (!query.exec()) {
+        qDebug() << "updateInventoryStockByItemCode failed:" << query.lastError().text();
+        return false;
+    }
+
+    return true;
 }

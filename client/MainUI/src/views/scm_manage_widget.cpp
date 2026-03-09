@@ -184,6 +184,7 @@ void ScmManageWidget::setupOpcBindings()
                 }
             });
 
+
     connect(ua, &OpcUaService::logWhLoadedUpdated, this,
             [this](int wh, bool loaded){
                 if (!loaded) return;
@@ -193,7 +194,7 @@ void ScmManageWidget::setupOpcBindings()
 
                 qDebug() << "[SCM] WH" << wh << "loaded=true, delay DONE";
 
-                QTimer::singleShot(300, this, [this, wh, orderId]() {
+                QTimer::singleShot(3000, this, [this, wh, orderId]() {
                     if (!m_activeOrderIdByWh.contains(wh))
                         return;
                     if (m_activeOrderIdByWh.value(wh) != orderId)

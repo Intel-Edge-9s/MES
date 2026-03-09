@@ -75,53 +75,50 @@ void ProcessWidget::add_process_item(QTreeWidgetItem *parent_item, const QString
     ui->process_tree_widget->setItemWidget(item, 1, container);
 }
 
+
 void ProcessWidget::on_start_clicked(const QString &process_name)
 {
-    qDebug() << "[시작 신호]" << process_name;
-
-    if (process_name != "제조 컨테이너 1") {
-        qDebug() << "[INFO] belt/manual control is not wired in this flow yet:" << process_name;
-        return;
-    }
-
-    if (!m_ua) {
-        QMessageBox::warning(this, "오류", "OPC UA 서비스가 연결되지 않았습니다.");
-        return;
-    }
+    Q_UNUSED(process_name);
 
     bool ok = false;
-    QString orderId = QInputDialog::getText(this,
-                                            "생산 시작",
-                                            "Production Order ID 입력:",
-                                            QLineEdit::Normal,
-                                            "",
-                                            &ok).trimmed();
+    QString orderId = QInputDialog::getText(
+                          this, "생산 시작", "Production Order ID 입력:",
+                          QLineEdit::Normal, "", &ok).trimmed();
 
     if (!ok || orderId.isEmpty())
         return;
 
-    const ProductionOrderTask task = ManufactureService::getProductionOrderById(orderId);
+    auto task = ManufactureService::getProductionOrderById(orderId);
     if (!task.valid) {
-        QMessageBox::warning(this, "오류", "해당 생산오더를 찾을 수 없습니다.");
+        QMessageBox::warning(this, "오류", "생산오더를 찾을 수 없습니다.");
         return;
     }
-
-    if (task.status.compare("PENDING", Qt::CaseInsensitive) != 0) {
-        QMessageBox::warning(this, "오류", "현재 상태가 PENDING인 오더만 시작할 수 있습니다.");
+    if (task.status != "PENDING") {
+        QMessageBox::warning(this, "오류", "PENDING 상태 오더만 시작할 수 있습니다.");
         return;
     }
-
-    const double speed = task.motorSpeed > 0 ? task.motorSpeed : 100.0;
-    m_ua->mfgWriteSpeed(speed);
-    m_ua->mfgStartOrder(task.orderId, static_cast<quint16>(task.productNo), static_cast<quint32>(task.orderCount));
+    if (!m_ua) {
+        QMessageBox::warning(this, "오류", "OPC UA 서비스가 연결되지 않았습니다.");
+        return;
+    }
+    if (task.recipe.trimmed().isEmpty()) {
+        QMessageBox::warning(this, "오류", "product.recipe 값이 비어 있습니다.");
+        return;
+    }
 
     if (!ManufactureService::markProductionOrderInProc(task.orderId)) {
-        QMessageBox::warning(this, "오류", "생산오더 상태를 INPROC로 바꾸지 못했습니다.");
+        QMessageBox::warning(this, "오류", "오더 상태를 INPROC로 변경하지 못했습니다.");
+        return;
+    }
+    if (!ManufactureService::createProductLog(task)) {
+        QMessageBox::warning(this, "오류", "생산 로그 생성에 실패했습니다.");
         return;
     }
 
-    ManufactureService::createProductLog(task);
-    emit productionOrderStarted(task.orderId, task.productId);
+    m_ua->mfgWriteSpeed(task.motorSpeed <= 0 ? 100.0 : task.motorSpeed);
+    m_ua->mfgStartOrder(task.orderId, static_cast<quint16>(task.productNo), static_cast<quint32>(task.orderCount));
+
+    emit productionOrderStarted(task.orderId, task.productId, task.recipe);
 }
 
 void ProcessWidget::on_stop_clicked(const QString &process_name)

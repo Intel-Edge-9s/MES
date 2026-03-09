@@ -1,4 +1,4 @@
-﻿#include "mainwindow.h"
+#include "mainwindow.h"
 #include "ui_mainwindow.h"
 #include "base/base_page_widget.h"
 #include "login_widget.h"
@@ -9,6 +9,7 @@
 #include "../services/manufacture_service.h"
 #include "../services/scm_manage_service.h"
 #include <QDebug>
+#include <QTimer>
 #include <QFile>
 
 MainWindow::MainWindow(QWidget *parent)
@@ -19,14 +20,17 @@ MainWindow::MainWindow(QWidget *parent)
     auto* process = qobject_cast<ProcessWidget*>(ui->processPage);
     if (process) {
         process->setOpcUaService(ua);
-        connect(process, &ProcessWidget::productionOrderStarted, this,
-                [this](const QString &orderId, const QString &productId) {
+
+        connect(process, &ProcessWidget::productionOrderStarted,
+                this, [this](const QString &orderId, const QString &productId, const QString &recipe){
                     m_activeProdOrderId = orderId;
                     m_activeProductId = productId;
+                    m_activeRecipe = recipe;
+                    m_activeRecipeItems = ManufactureService::parseRecipeString(recipe);
                     m_lastProdCount = 0;
-                    m_lastDefectCount = 0;
                     m_lastAttemptCount = 0;
-                    m_waitMaterialStopRequested = false;
+                    m_lastDefectCount = 0;
+                    m_materialStopRequested = false;
                 });
     }
 
@@ -37,24 +41,30 @@ MainWindow::MainWindow(QWidget *parent)
                 ua->mfgSendAuthResult(ok);
             });
 
+
     connect(ua, &OpcUaService::logAuthRequestReceived, this,
             [this](const QString &id, const QString &pw){
                 const bool ok = m_authService.checkServerAccount("LOG", id, pw);
                 qDebug() << "[MES] LOG auth request:" << "id =" << id << "result =" << ok;
                 ua->logSendAuthResult(ok);
+
+                if (ok) {
+                    QTimer::singleShot(300, this, [this]() {
+                        const RawMaterialStockSnapshot snap = ScmManageService::getRawMaterialStockSnapshot();
+                        qDebug() << "[MES] LOG seed stocks from DB:"
+                                 << snap.s1 << snap.s2 << snap.s3 << snap.s4;
+                        ua->logInitItemStocks(snap.s1, snap.s2, snap.s3, snap.s4);
+                        m_logStockSeeded = true;
+                    });
+                }
             });
 
-    connect(ua, &OpcUaService::logConnectedChanged, this, [this](bool connected) {
-        if (!connected)
-            return;
 
-        if (!DatabaseManager::instance().connect()) {
-            qDebug() << "[MES] DB connect failed -> skip LOG init sync";
+    connect(ua, &OpcUaService::logConnectedChanged, this, [this](bool connected){
+        if (!connected) {
+            m_logStockSeeded = false;
             return;
         }
-
-        const WarehouseStockSnapshot snap = ScmManageService::getWarehouseStockSnapshot();
-        ua->logInitStocks(snap.wh1, snap.wh2, snap.wh3);
     });
 
     connect(ua, &OpcUaService::mfgProdCountUpdated, this, [this](quint64 v) {
@@ -68,8 +78,7 @@ MainWindow::MainWindow(QWidget *parent)
 
         m_lastProdCount = prodCount;
         ManufactureService::increaseProductStock(m_activeProductId, delta);
-        ManufactureService::updateProductLogProgress(m_activeProdOrderId, m_lastProdCount, m_lastDefectCount,
-                                                    m_waitMaterialStopRequested ? "WAIT_MAT" : "INPROC");
+        ManufactureService::updateProductLogProgress(m_activeProdOrderId, m_lastProdCount, m_lastDefectCount, "INPROC");
     });
 
     connect(ua, &OpcUaService::mfgDefectCountUpdated, this, [this](quint64 v) {
@@ -77,8 +86,7 @@ MainWindow::MainWindow(QWidget *parent)
             return;
 
         m_lastDefectCount = static_cast<int>(v);
-        ManufactureService::updateProductLogProgress(m_activeProdOrderId, m_lastProdCount, m_lastDefectCount,
-                                                    m_waitMaterialStopRequested ? "WAIT_MAT" : "INPROC");
+        ManufactureService::updateProductLogProgress(m_activeProdOrderId, m_lastProdCount, m_lastDefectCount, "INPROC");
     });
 
     connect(ua, &OpcUaService::mfgAttemptCountUpdated, this, [this](quint64 v) {
@@ -92,29 +100,51 @@ MainWindow::MainWindow(QWidget *parent)
 
         m_lastAttemptCount = attemptCount;
 
-        const auto recipe = ManufactureService::getRecipeItemsByProductId(m_activeProductId);
-        for (const auto &item : recipe) {
-            if (item.warehouseNo < 1 || item.warehouseNo > 3)
-                continue;
+        if (m_activeRecipeItems.isEmpty())
+            m_activeRecipeItems = ManufactureService::parseRecipeString(m_activeRecipe);
 
-            const quint32 consumeQty = static_cast<quint32>(item.quantityRequired * delta);
-            ua->logConsume(item.warehouseNo, consumeQty);
+        for (int n = 0; n < delta; ++n) {
+            for (const auto &item : m_activeRecipeItems) {
+                if (item.itemCode.isEmpty() || item.quantityRequired <= 0)
+                    continue;
+                ua->logConsumeItem(item.itemCode, static_cast<quint32>(item.quantityRequired));
+            }
         }
 
-        ManufactureService::consumeRecipeItems(m_activeProductId, delta);
-        ManufactureService::updateProductLogProgress(m_activeProdOrderId, m_lastProdCount, m_lastDefectCount,
-                                                    m_waitMaterialStopRequested ? "WAIT_MAT" : "INPROC");
+        ManufactureService::updateProductLogProgress(m_activeProdOrderId, m_lastProdCount, m_lastDefectCount, "INPROC");
     });
 
-    connect(ua, &OpcUaService::logWhLowStockUpdated, this, [this](int, bool low) {
-        if (!low || m_activeProdOrderId.isEmpty() || m_waitMaterialStopRequested)
-            return;
 
-        m_waitMaterialStopRequested = true;
-        ua->mfgStopOrder();
-        ManufactureService::markProductionOrderWaitMaterial(m_activeProdOrderId);
-        ManufactureService::updateProductLogProgress(m_activeProdOrderId, m_lastProdCount, m_lastDefectCount, "WAIT_MAT");
-    });
+    connect(ua, &OpcUaService::logItemStockUpdated, this,
+            [this](const QString &itemCode, quint32 stock){
+                const QString key = itemCode.trimmed().toLower();
+                m_itemStocks[key] = static_cast<int>(stock);
+
+                if (!m_logStockSeeded) {
+                    qDebug() << "[MES] ignore pre-seed stock update:" << itemCode << stock;
+                    return;
+                }
+
+                ScmManageService::updateInventoryStockByItemCode(itemCode, static_cast<int>(stock));
+
+                if (!m_activeProdOrderId.isEmpty() && stock <= 5)
+                    requestMaterialStop(QString("low stock: %1=%2").arg(itemCode).arg(stock));
+            });
+
+    connect(ua, &OpcUaService::logItemLowStockUpdated, this,
+            [this](const QString &itemCode, bool low){
+                m_itemLowFlags[itemCode.toLower()] = low;
+                if (!m_activeProdOrderId.isEmpty() && low)
+                    requestMaterialStop(QString("low_stock node true: %1").arg(itemCode));
+            });
+
+
+
+    connect(ua, &OpcUaService::errorOccurred, this,
+            [this](const QString &where, const QString &msg){
+                if (!m_activeProdOrderId.isEmpty() && where == "logConsumeItem")
+                    requestMaterialStop(QString("consume failed: %1").arg(msg));
+            });
 
     connect(ua, &OpcUaService::mfgStatusUpdated, this, [this](const QString &status) {
         if (m_activeProdOrderId.isEmpty())
@@ -123,12 +153,7 @@ MainWindow::MainWindow(QWidget *parent)
         if (status.compare("Done", Qt::CaseInsensitive) == 0) {
             ManufactureService::markProductionOrderDone(m_activeProdOrderId);
             ManufactureService::updateProductLogProgress(m_activeProdOrderId, m_lastProdCount, m_lastDefectCount, "DONE");
-            m_activeProdOrderId.clear();
-            m_activeProductId.clear();
-            m_lastProdCount = 0;
-            m_lastDefectCount = 0;
-            m_lastAttemptCount = 0;
-            m_waitMaterialStopRequested = false;
+            clearActiveProduction();
         }
     });
 
@@ -153,6 +178,31 @@ MainWindow::MainWindow(QWidget *parent)
 
 MainWindow::~MainWindow() {
     delete ui;
+}
+
+void MainWindow::requestMaterialStop(const QString &reason)
+{
+    if (m_activeProdOrderId.isEmpty() || m_materialStopRequested)
+        return;
+
+    m_materialStopRequested = true;
+    qDebug() << "[MES] material stop requested:" << reason;
+
+    ManufactureService::updateProductLogProgress(m_activeProdOrderId, m_lastProdCount, m_lastDefectCount, "INPROC");
+    if (ua)
+        ua->mfgStopOrder();
+}
+
+void MainWindow::clearActiveProduction()
+{
+    m_activeProdOrderId.clear();
+    m_activeProductId.clear();
+    m_activeRecipe.clear();
+    m_activeRecipeItems.clear();
+    m_lastProdCount = 0;
+    m_lastDefectCount = 0;
+    m_lastAttemptCount = 0;
+    m_materialStopRequested = false;
 }
 
 void MainWindow::startOpcUaOnce()

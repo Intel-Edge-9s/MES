@@ -7,18 +7,16 @@ public:
     // SELECT
     static QList<ManufactureInfo> getProducts();
     static QList<ManufactureScheduleInfo> getSchedules();
-
-    // UPDATE
     static ProductionOrderTask getProductionOrderById(const QString &orderId);
     static QList<RecipeItem> getRecipeItemsByProductId(const QString &productId);
+    static QList<RecipeItem> parseRecipeString(const QString &recipe);
 
+    // UPDATE
     static bool markProductionOrderInProc(const QString &orderId);
     static bool markProductionOrderWaitMaterial(const QString &orderId);
     static bool markProductionOrderDone(const QString &orderId);
-
     static bool updateProductStock(const QString &product_id, int new_stock);
     static bool updateProductLogProgress(const QString &orderId, int prodCount, int defectCount, const QString &status);
-
     static bool increaseProductStock(const QString &productId, int delta);
     static bool consumeRecipeItems(const QString &productId, int producedDelta);
 
