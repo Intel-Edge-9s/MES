@@ -1,7 +1,7 @@
-<?xml version="1.0" encoding="UTF-8"?>
+﻿<?xml version="1.0" encoding="UTF-8"?>
 <ui version="4.0">
- <class>ManufactureWidget</class>
- <widget class="QWidget" name="ManufactureWidget">
+ <class>ScmManageWidget</class>
+ <widget class="QWidget" name="ScmManageWidget">
   <property name="geometry">
    <rect>
     <x>0</x>
@@ -23,19 +23,77 @@
     </rect>
    </property>
    <layout class="QGridLayout" name="gridLayout">
-    <item row="0" column="0">
+    <item row="1" column="1">
+     <widget class="QTableWidget" name="tableStockStatus">
+      <property name="editTriggers">
+       <set>QAbstractItemView::EditTrigger::NoEditTriggers</set>
+      </property>
+      <property name="selectionMode">
+       <enum>QAbstractItemView::SelectionMode::SingleSelection</enum>
+      </property>
+      <property name="selectionBehavior">
+       <enum>QAbstractItemView::SelectionBehavior::SelectRows</enum>
+      </property>
+     </widget>
+    </item>
+    <item row="0" column="1">
      <widget class="QLabel" name="label">
       <property name="text">
-       <string>제품 현황</string>
+       <string>Raw Material Stock Status</string>
+      </property>
+     </widget>
+    </item>
+   </layout>
+  </widget>
+  <widget class="QWidget" name="gridLayoutWidget_2">
+   <property name="geometry">
+    <rect>
+     <x>60</x>
+     <y>290</y>
+     <width>951</width>
+     <height>341</height>
+    </rect>
+   </property>
+   <layout class="QGridLayout" name="gridLayout_2">
+    <item row="2" column="0">
+     <widget class="QTableWidget" name="tableStockOrder">
+      <property name="editTriggers">
+       <set>QAbstractItemView::EditTrigger::NoEditTriggers</set>
+      </property>
+      <property name="selectionMode">
+       <enum>QAbstractItemView::SelectionMode::SingleSelection</enum>
+      </property>
+      <property name="selectionBehavior">
+       <enum>QAbstractItemView::SelectionBehavior::SelectRows</enum>
+      </property>
+     </widget>
+    </item>
+    <item row="0" column="0">
+     <widget class="QLabel" name="label_2">
+      <property name="font">
+       <font>
+        <pointsize>12</pointsize>
+        <bold>true</bold>
+       </font>
+      </property>
+      <property name="text">
+       <string>물류 발주 스케줄 테이블</string>
       </property>
      </widget>
     </item>
     <item row="1" column="0">
-     <layout class="QHBoxLayout" name="stock_button_layout">
+     <layout class="QHBoxLayout" name="button_layout">
       <item>
-       <widget class="QPushButton" name="edit_stock_button">
+       <widget class="QPushButton" name="pushButton">
         <property name="text">
-         <string>Edit Stock</string>
+         <string>스케줄 생성</string>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <widget class="QPushButton" name="cancel_order_button">
+        <property name="text">
+         <string>스케줄 삭제</string>
         </property>
        </widget>
       </item>
@@ -53,89 +111,6 @@
        </spacer>
       </item>
      </layout>
-    </item>
-    <item row="2" column="0">
-     <widget class="QTableWidget" name="manufacture_table">
-      <property name="editTriggers">
-       <set>QAbstractItemView::EditTrigger::NoEditTriggers</set>
-      </property>
-      <property name="selectionMode">
-       <enum>QAbstractItemView::SelectionMode::SingleSelection</enum>
-      </property>
-      <property name="selectionBehavior">
-       <enum>QAbstractItemView::SelectionBehavior::SelectRows</enum>
-      </property>
-     </widget>
-    </item>
-   </layout>
-  </widget>
-  <widget class="QWidget" name="gridLayoutWidget_2">
-   <property name="geometry">
-    <rect>
-     <x>60</x>
-     <y>290</y>
-     <width>951</width>
-     <height>341</height>
-    </rect>
-   </property>
-   <layout class="QGridLayout" name="gridLayout_2">
-    <item row="0" column="0">
-     <widget class="QLabel" name="label_2">
-      <property name="text">
-       <string>Manufacture Schedule</string>
-      </property>
-     </widget>
-    </item>
-    <item row="1" column="0">
-     <layout class="QHBoxLayout" name="schedule_button_layout">
-      <item>
-       <widget class="QPushButton" name="create_schedule_button">
-        <property name="text">
-         <string>Create Schedule</string>
-        </property>
-       </widget>
-      </item>
-      <item>
-       <widget class="QPushButton" name="cancel_schedule_button">
-        <property name="text">
-         <string>Cancel Schedule</string>
-        </property>
-       </widget>
-      </item>
-      <item>
-       <spacer name="horizontalSpacer_2">
-        <property name="orientation">
-         <enum>Qt::Orientation::Horizontal</enum>
-        </property>
-        <property name="sizeHint" stdset="0">
-         <size>
-          <width>0</width>
-          <height>0</height>
-         </size>
-        </property>
-       </spacer>
-      </item>
-      <item>
-       <widget class="QPushButton" name="auto_button">
-        <property name="text">
-         <string>AutoMode : OFF</string>
-        </property>
-       </widget>
-      </item>
-     </layout>
-    </item>
-    <item row="2" column="0">
-     <widget class="QTableWidget" name="schedule_table">
-      <property name="editTriggers">
-       <set>QAbstractItemView::EditTrigger::NoEditTriggers</set>
-      </property>
-      <property name="selectionMode">
-       <enum>QAbstractItemView::SelectionMode::SingleSelection</enum>
-      </property>
-      <property name="selectionBehavior">
-       <enum>QAbstractItemView::SelectionBehavior::SelectRows</enum>
-      </property>
-     </widget>
     </item>
    </layout>
   </widget>

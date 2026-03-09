@@ -17,7 +17,7 @@
    <property name="geometry">
     <rect>
      <x>60</x>
-     <y>60</y>
+     <y>70</y>
      <width>951</width>
      <height>561</height>
     </rect>
@@ -25,8 +25,14 @@
    <layout class="QGridLayout" name="gridLayout">
     <item row="0" column="0">
      <widget class="QLabel" name="title_label">
+      <property name="font">
+       <font>
+        <pointsize>12</pointsize>
+        <bold>true</bold>
+       </font>
+      </property>
       <property name="text">
-       <string>Delivery List</string>
+       <string>납품 테이블</string>
       </property>
      </widget>
     </item>
@@ -35,14 +41,14 @@
       <item>
        <widget class="QPushButton" name="create_delivery_button">
         <property name="text">
-         <string>Create Delivery</string>
+         <string>새로운 납품 지시</string>
         </property>
        </widget>
       </item>
       <item>
        <widget class="QPushButton" name="complete_delivery_button">
         <property name="text">
-         <string>Complete Delivery</string>
+         <string>납품 완료</string>
         </property>
        </widget>
       </item>
@@ -79,14 +85,14 @@
   <widget class="QPushButton" name="Back_btn">
    <property name="geometry">
     <rect>
-     <x>10</x>
-     <y>10</y>
+     <x>20</x>
+     <y>20</y>
      <width>80</width>
      <height>30</height>
     </rect>
    </property>
    <property name="text">
-    <string>Back</string>
+    <string>뒤로 가기</string>
    </property>
   </widget>
  </widget>

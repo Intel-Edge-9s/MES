@@ -135,12 +135,6 @@ void EnvironmentLogsWidget::loadAllData()
     refreshLogView();
 }
 
-
-
-
-
-
-
 // clear filter, not original logs
 void EnvironmentLogsWidget::onClearClicked()
 {

@@ -65,20 +65,20 @@ if(${QT_VERSION_MAJOR} GREATER_EQUAL 6)
         src/views/base/base_page_widget.h
         src/views/base/page_types.h
 
-        src/views/mainwindow.h
         src/views/mainwindow.cpp
+        src/views/mainwindow.h
         src/views/mainwindow.ui
 
-        src/views/process_widget.h
         src/views/process_widget.cpp
+        src/views/process_widget.h
         src/views/process_widget.ui
 
-        src/views/login_widget.h
         src/views/login_widget.cpp
+        src/views/login_widget.h
         src/views/login_widget.ui
 
-        src/views/dashboard_widget.h
         src/views/dashboard_widget.cpp
+        src/views/dashboard_widget.h
         src/views/dashboard_widget.ui
 
         src/views/partner_manage_widget.cpp
@@ -101,17 +101,21 @@ if(${QT_VERSION_MAJOR} GREATER_EQUAL 6)
         src/views/environment_logs_widget.h
         src/views/environment_logs_widget.ui
 
+        src/views/manufacture_schedule_dialog.cpp
+        src/views/manufacture_schedule_dialog.h
+        src/views/manufacture_schedule_dialog.ui
+
         src/views/delivery_dialog.cpp
         src/views/delivery_dialog.h
         src/views/delivery_dialog.ui
 
-        src/views/order_edit_dialog.ui
         src/views/order_edit_dialog.cpp
         src/views/order_edit_dialog.h
+        src/views/order_edit_dialog.ui
 
-        src/views/manufacture_schedule_dialog.cpp
-        src/views/manufacture_schedule_dialog.h
-        src/views/manufacture_schedule_dialog.ui
+        src/views/scm_manage_auto_dialog.cpp
+        src/views/scm_manage_auto_dialog.h
+        src/views/scm_manage_auto_dialog.ui
     )
 else()
     if(ANDROID)

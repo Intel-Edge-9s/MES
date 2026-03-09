@@ -59,7 +59,7 @@
     </font>
    </property>
    <property name="text">
-    <string>Process Monitor</string>
+    <string>공정 모니터</string>
    </property>
   </widget>
   <widget class="QPushButton" name="Back_btn">

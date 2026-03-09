@@ -6,8 +6,8 @@
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>1080</width>
-    <height>720</height>
+    <width>480</width>
+    <height>320</height>
    </rect>
   </property>
   <property name="windowTitle">
@@ -16,34 +16,43 @@
   <widget class="QLabel" name="title_label">
    <property name="geometry">
     <rect>
-     <x>320</x>
-     <y>70</y>
-     <width>200</width>
+     <x>175</x>
+     <y>20</y>
+     <width>140</width>
      <height>30</height>
     </rect>
    </property>
+   <property name="font">
+    <font>
+     <pointsize>12</pointsize>
+     <bold>true</bold>
+    </font>
+   </property>
    <property name="text">
-    <string>Delivery Order</string>
+    <string>납품 지시</string>
+   </property>
+   <property name="alignment">
+    <set>Qt::AlignmentFlag::AlignCenter</set>
    </property>
   </widget>
   <widget class="QLabel" name="product_label">
    <property name="geometry">
     <rect>
-     <x>90</x>
-     <y>250</y>
+     <x>80</x>
+     <y>80</y>
      <width>100</width>
      <height>22</height>
     </rect>
    </property>
    <property name="text">
-    <string>Product</string>
+    <string>제품명</string>
    </property>
   </widget>
   <widget class="QComboBox" name="product_combo">
    <property name="geometry">
     <rect>
-     <x>200</x>
-     <y>250</y>
+     <x>190</x>
+     <y>80</y>
      <width>200</width>
      <height>22</height>
     </rect>
@@ -52,21 +61,21 @@
   <widget class="QLabel" name="company_label">
    <property name="geometry">
     <rect>
-     <x>90</x>
-     <y>300</y>
+     <x>80</x>
+     <y>130</y>
      <width>100</width>
      <height>22</height>
     </rect>
    </property>
    <property name="text">
-    <string>Customer</string>
+    <string>고객사</string>
    </property>
   </widget>
   <widget class="QComboBox" name="company_combo">
    <property name="geometry">
     <rect>
-     <x>200</x>
-     <y>300</y>
+     <x>190</x>
+     <y>130</y>
      <width>200</width>
      <height>22</height>
     </rect>
@@ -75,21 +84,21 @@
   <widget class="QLabel" name="stock_label">
    <property name="geometry">
     <rect>
-     <x>90</x>
-     <y>350</y>
+     <x>80</x>
+     <y>180</y>
      <width>100</width>
      <height>22</height>
     </rect>
    </property>
    <property name="text">
-    <string>Quantity</string>
+    <string>개수</string>
    </property>
   </widget>
   <widget class="QLineEdit" name="stock_edit">
    <property name="geometry">
     <rect>
-     <x>200</x>
-     <y>350</y>
+     <x>190</x>
+     <y>180</y>
      <width>200</width>
      <height>22</height>
     </rect>
@@ -98,27 +107,32 @@
   <widget class="QPushButton" name="confirm_button">
    <property name="geometry">
     <rect>
-     <x>200</x>
-     <y>500</y>
-     <width>80</width>
+     <x>80</x>
+     <y>240</y>
+     <width>201</width>
      <height>30</height>
     </rect>
    </property>
+   <property name="font">
+    <font>
+     <bold>true</bold>
+    </font>
+   </property>
    <property name="text">
-    <string>Confirm</string>
+    <string>확인</string>
    </property>
   </widget>
   <widget class="QPushButton" name="cancel_button">
    <property name="geometry">
     <rect>
-     <x>320</x>
-     <y>500</y>
+     <x>310</x>
+     <y>240</y>
      <width>80</width>
      <height>30</height>
     </rect>
    </property>
    <property name="text">
-    <string>Cancel</string>
+    <string>취소</string>
    </property>
   </widget>
  </widget>
