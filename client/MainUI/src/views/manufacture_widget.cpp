@@ -218,8 +218,15 @@ void ManufactureWidget::setupOpcBindings()
     });
 
     // 2. 공정 상태가 변했을 때 (PENDING -> INPROC -> DONE 등)
-    connect(ua, &OpcUaService::mfgStatusUpdated, this, [this](){
+    connect(ua, &OpcUaService::mfgStatusUpdated, this, [this](const QString &status){
         loadScheduleData();
+
+        // 오토 모드이고 장비 상태가 'IDLE' 혹은 'Done'으로 변했다면 실행
+        if (m_isAutoMode && (status.compare("Idle", Qt::CaseInsensitive) == 0 || 
+                             status.compare("Done", Qt::CaseInsensitive) == 0)) {
+            qDebug() << "[AUTO] Machine is Idle. Searching for next task...";
+            tryProcessNextAutoTask();
+        }
     });
     
 }
@@ -245,30 +252,47 @@ void ManufactureWidget::tryProcessNextAutoTask()
 
     auto *mw = qobject_cast<MainWindow*>(window());
     auto *ua = mw ? mw->opcUaService() : nullptr;
-    if (!ua) return;
+    // 1. 서버 연결 확인 예외처리
+    if (!ua || !ua->isMfgConnected()) {
+        qDebug() << "[AUTO] Error: OPC UA Server is disconnected.";
+        // 연결 끊김 시 자동모드 해제 및 알림
+        on_auto_button_clicked(); // 토글 함수를 호출하여 OFF 상태로 변경
+        QMessageBox::critical(this, "통신 오류", "OPC UA 서버와 연결되어 있지 않아 자동 모드를 종료합니다.");
+        return; 
+    }
 
-    // A. DB에서 최우선 순위(PENDING & Lowest count) 오더 가져오기
+    // 2. DB에서 최우선 순위(PENDING & Lowest count) 오더 가져오기
     auto task = ManufactureService::getNextAutoPendingOrder();
 
     if (!task.valid) {
         qDebug() << "[AUTO] No pending orders found.";
+        // 데이터 없을 시 자동모드 해제 및 알림
+        if (m_isAutoMode) on_auto_button_clicked(); 
+        QMessageBox::information(this, "자동 모드 종료", "대기 중인(PENDING) 생산 데이터가 없습니다.");
         return;
     }
 
-    // B. 오더 유효성 검사 (레시피 유무 등)
+    // 3. 오더 유효성 검사 (레시피 유무 등)
     if (task.recipe.trimmed().isEmpty()) {
         qDebug() << "[AUTO] Task" << task.orderId << "has no recipe. Skipping.";
+        if (m_isAutoMode) on_auto_button_clicked(); 
+        QMessageBox::information(this, "자동 모드 종료", "생산하고자 하는 제품의 레시피가 없습니다.");
         return;
     }
-
-    // C. 오더 상태 변경 (PENDING -> INPROC) 및 로그 생성
-    if (!ManufactureService::markProductionOrderInProc(task.orderId)) return;
-    if (!ManufactureService::createProductLog(task)) return;
-
-    // D. 장비에 작업 지시 (ProcessWidget 로직 재사용)
+    // 4. 장비에 작업 지시 (ProcessWidget 로직 재사용)
     ua->mfgWriteSpeed(task.motorSpeed <= 0 ? 100.0 : task.motorSpeed);
     ua->mfgStartOrder(task.orderId, static_cast<quint16>(task.productNo), static_cast<quint32>(task.orderCount));
 
+
+    // 5. DB 상태 변경 (전송 직후 수행)
+    if (!ManufactureService::markProductionOrderInProc(task.orderId)) {
+        qDebug() << "[AUTO] Failed to update status to INPROC for:" << task.orderId;
+        return;
+    }
+    
+    if (!ManufactureService::createProductLog(task)) {
+        qDebug() << "[AUTO] Failed to create product log for:" << task.orderId;
+    }
     qDebug() << "[AUTO] Successfully started order:" << task.orderId;
     
     // UI 테이블 갱신

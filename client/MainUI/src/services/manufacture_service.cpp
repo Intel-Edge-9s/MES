@@ -157,21 +157,31 @@ ProductionOrderTask ManufactureService::getNextAutoPendingOrder() {
     task.valid = false;
 
     QSqlQuery query;
-    // 조건: PENDING 상태 중 order_count가 가장 적은 것 하나 (동률일 경우 먼저 생성된 것)
-    query.prepare("SELECT l.id, l.order_count, l.motor_speed, l.status, p.product_no, p.recipe "
-                  "FROM product_order_logs l "
-                  "JOIN product p ON l.product_id = p.id "
-                  "WHERE l.status = 'PENDING' "
-                  "ORDER BY l.order_count ASC, l.created_at ASC LIMIT 1");
+    // 7일 이내(EDD) + 그 외 수량 적은 순(SPT) 정렬
+    QString sql = 
+        "SELECT l.id, l.order_count, l.motor_speed, l.status, p.product_code, p.recipe "
+        "FROM product_order_logs l "
+        "JOIN product p ON l.product_id = p.id "
+        "WHERE l.status = 'PENDING' "
+        "ORDER BY "
+        "  (l.deadline_at <= DATE_ADD(NOW(), INTERVAL 7 DAY)) DESC, " // 1순위: 7일 이내 여부
+        "  CASE WHEN l.deadline_at <= DATE_ADD(NOW(), INTERVAL 7 DAY) THEN l.deadline_at END ASC, " // 2순위: 급한 날짜
+        "  l.order_count ASC, " // 3순위: 적은 수량
+        "  l.created_at ASC "   // 4순위: 먼저 생성된 순
+        "LIMIT 1";
 
-    if (query.exec() && query.next()) {
+    if (query.exec(sql) && query.next()) {
         task.valid = true;
         task.orderId = query.value("id").toString();
         task.orderCount = query.value("order_count").toInt();
         task.motorSpeed = query.value("motor_speed").toInt();
         task.status = query.value("status").toString();
-        task.productNo = query.value("product_no").toInt();
+        task.productCode = query.value("product_code").toString();
         task.recipe = query.value("recipe").toString();
+
+        QRegularExpression re("(\\d+)$");
+        auto match = re.match(task.productCode);
+        task.productNo = match.hasMatch() ? match.captured(1).toInt() : 1;
     }
     return task;
 }
@@ -302,7 +312,9 @@ bool ManufactureService::createProductLog(const ProductionOrderTask &task)
         "(id, order_id, user_id, assignment_part, motor_speed, prod_count, defect_count, status, started_at) "
         "VALUES (UUID(), :orderId, :userId, 'MFG', :motorSpeed, 0, 0, 'INPROC', NOW())");
     query.bindValue(":orderId", task.orderId);
-    query.bindValue(":userId", UserSession::instance().userId().isEmpty() ? QVariant(QVariant::String) : QVariant(UserSession::instance().userId()));
+    query.bindValue(":userId", UserSession::instance().userId().isEmpty() 
+                ? QVariant(QMetaType(QMetaType::QString)) // 명시적 NULL QString 타입
+                : QVariant(UserSession::instance().userId()));
     query.bindValue(":motorSpeed", task.motorSpeed);
 
     if (!query.exec()) {

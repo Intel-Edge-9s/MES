@@ -1136,6 +1136,9 @@ OpcUaService::OpcUaService(QObject *parent) : QObject(parent) {
     connect(&m_thread, &QThread::finished, m_worker, &QObject::deleteLater);
 
     connect(m_worker, &Worker::logArrivalRequested, this, &OpcUaService::logArrivalRequested);
+    
+    connect(m_worker, &Worker::mfgConnectedChanged, this, &OpcUaService::updateMfgConnected);
+    connect(m_worker, &Worker::logConnectedChanged, this, &OpcUaService::updateLogConnected);
 }
 
 OpcUaService::~OpcUaService() {
@@ -1264,4 +1267,31 @@ void OpcUaService::logClearArrivalRequest() {
     QMetaObject::invokeMethod(m_worker, "logClearArrivalRequest", Qt::QueuedConnection);
 }
 
+void OpcUaService::updateMfgConnected(bool connected)
+{
+    if (m_mfgConnected != connected) {
+        m_mfgConnected = connected;
+        emit mfgConnectedChanged(connected);
+
+        if (connected) {
+            emit info("Manufacturing Server Connected");
+        } else {
+            emit info("Manufacturing Server Disconnected");
+        }
+    }
+}
+
+void OpcUaService::updateLogConnected(bool connected)
+{
+    if (m_logConnected != connected) {
+        m_logConnected = connected;
+        emit logConnectedChanged(connected);
+
+        if (connected) {
+            emit info("Log Server Connected");
+        } else {
+            emit info("Log Server Disconnected");
+        }
+    }
+}
 #include "opcua_service.moc"

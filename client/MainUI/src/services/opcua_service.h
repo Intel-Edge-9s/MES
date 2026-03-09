@@ -22,6 +22,10 @@ public:
     void start();
     void stop();
 
+    bool isLogConnected() const { return m_logConnected; }
+    // 제조(MFG) 서버 연결 상태 확인 함수
+    bool isMfgConnected() const { return m_mfgConnected; }
+    
     Q_INVOKABLE void connectMfg(const QString &endpoint,
                                 const QString &user,
                                 const QString &pass,
@@ -85,8 +89,15 @@ signals:
     void errorOccurred(const QString &where, const QString &msg);
     void info(const QString &msg);
 
+
 private:
+    bool m_mfgConnected = false;
+    bool m_logConnected = false;
     class Worker;
     Worker *m_worker = nullptr;
     QThread m_thread;
+
+private slots:
+    void updateMfgConnected(bool connected);
+    void updateLogConnected(bool connected);
 };
