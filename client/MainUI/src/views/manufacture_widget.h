@@ -20,6 +20,9 @@ class ManufactureWidget : public BasePageWidget
 public:
     explicit ManufactureWidget(QWidget *parent = nullptr);
     ~ManufactureWidget();
+    void setActiveProductionContext(const QString &orderId,
+                                    const QString &productId,
+                                    const QString &recipe);
 
 private slots:
     void on_Back_btn_clicked();
@@ -28,6 +31,11 @@ private slots:
     void on_cancel_schedule_button_clicked();
     void on_auto_button_clicked();
 
+
+signals:
+    void productionOrderStarted(const QString &orderId,
+                                const QString &productId,
+                                const QString &recipe);
 private:
     Ui::ManufactureWidget *ui;
 
@@ -44,6 +52,9 @@ private:
 
     void tryProcessNextAutoTask(); // 다음 오더 실행 시도 함수
     bool m_isAutoMode = false;     // 오토 모드 플래그
+    QString m_activeOrderId;
+    QString m_activeProductId;
+    QString m_activeRecipe;
     
 
 protected:

@@ -20,6 +20,10 @@ public:
     MainWindow(QWidget *parent = nullptr);
     ~MainWindow();
     OpcUaService* opcUaService() const { return ua; }
+    void setActiveProductionContext(const QString &orderId,
+                                    const QString &productId,
+                                    const QString &recipe);
+
 
 private:
     Ui::MainWindow *ui;

@@ -5,9 +5,11 @@
 #include "dashboard_widget.h"
 #include "partner_manage_widget.h"
 #include "process_widget.h"
+#include "manufacture_widget.h"
 #include "../core/database_manager.h"
 #include "../services/manufacture_service.h"
 #include "../services/scm_manage_service.h"
+#include "../services/environment_logs_service.h"
 #include <QDebug>
 #include <QTimer>
 #include <QFile>
@@ -16,7 +18,7 @@ MainWindow::MainWindow(QWidget *parent)
     : QMainWindow(parent), ui(new Ui::MainWindow) {
     ui->setupUi(this);
     ua = new OpcUaService(this);
-
+    auto* manufacture = qobject_cast<ManufactureWidget*>(ui->manufacturePage);
     auto* process = qobject_cast<ProcessWidget*>(ui->processPage);
     if (process) {
         process->setOpcUaService(ua);
@@ -32,11 +34,30 @@ MainWindow::MainWindow(QWidget *parent)
                     m_lastDefectCount = 0;
                     m_materialStopRequested = false;
                 });
+
+
+    }
+    if (manufacture) {
+        connect(manufacture, &ManufactureWidget::productionOrderStarted,
+                this, [this](const QString &orderId, const QString &productId, const QString &recipe){
+                    m_activeProdOrderId = orderId;
+                    m_activeProductId = productId;
+                    m_activeRecipe = recipe;
+                    m_activeRecipeItems = ManufactureService::parseRecipeString(recipe);
+                    m_lastProdCount = 0;
+                    m_lastAttemptCount = 0;
+                    m_lastDefectCount = 0;
+                    m_materialStopRequested = false;
+
+                    qDebug() << "[MAIN] productionOrderStarted from manufacture:"
+                             << orderId << productId << recipe;
+                });
     }
     auto* dashboard = qobject_cast<DashboardWidget*>(ui->dashBoardPage);
     if (dashboard) {
         dashboard->set_opcua_service(ua);
     }
+
 
     connect(ua, &OpcUaService::mfgAuthRequestReceived, this,
             [this](const QString &id, const QString &pw){
@@ -190,12 +211,15 @@ void MainWindow::requestMaterialStop(const QString &reason)
         return;
 
     m_materialStopRequested = true;
-    qDebug() << "[MES] material stop requested:" << reason;
+
+
 
     ManufactureService::updateProductLogProgress(m_activeProdOrderId, m_lastProdCount, m_lastDefectCount, "INPROC");
     if (ua)
         ua->mfgStopOrder();
 }
+
+
 
 void MainWindow::clearActiveProduction()
 {
