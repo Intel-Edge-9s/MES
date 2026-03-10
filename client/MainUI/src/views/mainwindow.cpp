@@ -14,7 +14,7 @@
 #include <QMessageBox>
 #include <QTimer>
 #include <QFile>
-const double kFireTestThreshold = 29.5;
+const double kFireTestThreshold = 50.0;
 
 
 
@@ -100,12 +100,13 @@ MainWindow::MainWindow(QWidget *parent)
                 ua->logSendAuthResult(ok);
 
                 if (ok) {
+                    m_logStockSeeded = true;
+
                     QTimer::singleShot(300, this, [this]() {
                         const RawMaterialStockSnapshot snap = ScmManageService::getRawMaterialStockSnapshot();
                         qDebug() << "[MES] LOG seed stocks from DB:"
                                  << snap.s1 << snap.s2 << snap.s3 << snap.s4;
                         ua->logInitItemStocks(snap.s1, snap.s2, snap.s3, snap.s4);
-                        m_logStockSeeded = true;
                     });
                 }
             });
@@ -310,7 +311,10 @@ void MainWindow::requestEmergencyStopAll(const QString &source, double temp)
                                   .arg(source)
                                   .arg(QString::number(temp, 'f', 1)));
         ua->mfgStopOrder();
-        ua->logStopMove();
+        ua->logStopMove(1);
+        ua->logStopMove(2);
+        ua->logStopMove(3);
+
     }
     clearActiveProduction();
 }

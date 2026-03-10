@@ -484,33 +484,48 @@ Move_cb(UA_Server *server,
     return start_move_job(server, wh, qty);
 }
 
+
 static UA_StatusCode
 StopMove_cb(UA_Server *server,
             const UA_NodeId *sessionId, void *sessionContext,
             const UA_NodeId *methodId, void *methodContext,
             const UA_NodeId *objectId, void *objectContext,
             size_t inputSize, const UA_Variant *input,
-            size_t outputSize, UA_Variant *output) {
-    (void)server;
-    (void)sessionId; (void)sessionContext; (void)methodId; (void)methodContext;
-    (void)objectId; (void)objectContext; (void)inputSize; (void)input;
+            size_t outputSize, UA_Variant *output)
+{
+    (void)sessionId; (void)sessionContext;
+    (void)methodId; (void)methodContext;
+    (void)objectId; (void)objectContext;
     (void)outputSize; (void)output;
 
     if(!g_auth_ok)
-    return UA_STATUSCODE_BADUSERACCESSDENIED;
+        return UA_STATUSCODE_BADUSERACCESSDENIED;
 
-    printf("[LOG] StopMove called\n");
-
-    for(int i=0;i<3;i++){
-        g_job_seq[i]++;
-
-        if(g_step_cb_id[i] != 0) {
-            UA_Server_removeRepeatedCallback(server, g_step_cb_id[i]);
-            g_step_cb_id[i] = 0;
-        }
-
-        set_wh_flags(server, i, false, false);
+    if(inputSize < 1 || !UA_Variant_hasScalarType(&input[0], &UA_TYPES[UA_TYPES_UINT16])) {
+        printf("[LOG] StopMove invalid input\n");
+        fflush(stdout);
+        return UA_STATUSCODE_BADINVALIDARGUMENT;
     }
+
+    UA_UInt16 wh = *(UA_UInt16*)input[0].data;
+    if(wh < 1 || wh > 3) {
+        printf("[LOG] StopMove out of range: wh=%u\n", (unsigned)wh);
+        fflush(stdout);
+        return UA_STATUSCODE_BADOUTOFRANGE;
+    }
+
+    int i = (int)wh - 1;
+
+    printf("[LOG] StopMove called: wh=%u\n", (unsigned)wh);
+
+    g_job_seq[i]++;
+
+    if(g_step_cb_id[i] != 0) {
+        UA_Server_removeRepeatedCallback(server, g_step_cb_id[i]);
+        g_step_cb_id[i] = 0;
+    }
+
+    set_wh_flags(server, i, false, false);
 
     fflush(stdout);
     return UA_STATUSCODE_GOOD;
@@ -1252,6 +1267,31 @@ int main(void) {
             ma,
             &Move_cb,
             2, inArgs,
+            0, NULL,
+            NULL, NULL);
+    }
+
+        /* Method: StopMove(warehouse:uint16) */
+    {
+        UA_Argument inArg;
+        UA_Argument_init(&inArg);
+        inArg.name = UA_STRING("warehouse");
+        inArg.dataType = UA_TYPES[UA_TYPES_UINT16].typeId;
+        inArg.valueRank = -1;
+
+        UA_MethodAttributes ma = UA_MethodAttributes_default;
+        ma.displayName = UA_LOCALIZEDTEXT("en-US", "StopMove");
+        ma.executable = true;
+        ma.userExecutable = true;
+
+        (void)UA_Server_addMethodNode(server,
+            UA_NODEID_STRING(1, "log/StopMove"),
+            UA_NODEID_NUMERIC(0, UA_NS0ID_OBJECTSFOLDER),
+            UA_NODEID_NUMERIC(0, UA_NS0ID_HASCOMPONENT),
+            UA_QUALIFIEDNAME(1, "StopMove"),
+            ma,
+            &StopMove_cb,
+            1, &inArg,
             0, NULL,
             NULL, NULL);
     }

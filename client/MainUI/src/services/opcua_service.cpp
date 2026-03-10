@@ -313,18 +313,25 @@ public slots:
             emit errorOccurred("logMove", "call failed: " + sc(rc));
     }
 
-    void logStopMove() {
+
+    void logStopMove(quint16 wh) {
         QMutexLocker lk(&mu);
         if(!log.client || !log.connected) {
             emit errorOccurred("logStopMove", "LOG not connected");
             return;
         }
 
+        UA_UInt16 whArg = static_cast<UA_UInt16>(wh);
+        UA_Variant in;
+        UA_Variant_init(&in);
+        UA_Variant_setScalar(&in, &whArg, &UA_TYPES[UA_TYPES_UINT16]);
+
         UA_StatusCode rc = UA_Client_call(log.client,
                                           UA_NODEID_NUMERIC(0, UA_NS0ID_OBJECTSFOLDER),
                                           nid(LOG_STOPMOVE_M),
-                                          0, nullptr,
+                                          1, &in,
                                           0, nullptr);
+
         if(rc != UA_STATUSCODE_GOOD)
             emit errorOccurred("logStopMove", "call failed: " + sc(rc));
     }
@@ -1222,9 +1229,12 @@ void OpcUaService::logMove(int wh1to3, quint32 qty) {
                               Q_ARG(quint32, qty));
 }
 
-void OpcUaService::logStopMove() {
+
+void OpcUaService::logStopMove(quint16 wh) {
     start();
-    QMetaObject::invokeMethod(m_worker, "logStopMove", Qt::QueuedConnection);
+    QMetaObject::invokeMethod(m_worker, "logStopMove",
+                              Qt::QueuedConnection,
+                              Q_ARG(quint16, wh));
 }
 
 

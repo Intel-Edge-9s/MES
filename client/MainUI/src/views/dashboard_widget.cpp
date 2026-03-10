@@ -19,6 +19,7 @@ DashboardWidget::DashboardWidget(QWidget *parent)
     ui(new Ui::DashboardWidget)
 {
     ui->setupUi(this);
+    initMachineStatusWidget();
 }
 
 DashboardWidget::~DashboardWidget() {
@@ -37,7 +38,6 @@ void DashboardWidget::showEvent(QShowEvent *event)
     }
 
     initSensorWidget();
-    initMachineStatusWidget();
     initStorageCharts();
     initProductionChart();
 
@@ -269,15 +269,17 @@ void DashboardWidget::update_mfg_conveyor(const QString &status)
 {
     const QString s = status.trimmed().toLower();
 
+    qDebug() << "[DASHBOARD] status =" << status;
+
+
     bool running = false;
 
-    if (s == "run" || s == "running" || s == "inproc" || s == "work") {
+    if (s == "running") {
         running = true;
-    }
-
-    if (s == "idle" || s == "done" || s == "stop" || s == "stopped") {
+    } else if (s == "done" || s == "stopped") {
         running = false;
     }
+    qDebug() << "[DASHBOARD] running =" << running;
 
     setMachineLamp(3, running); // 제조는 4번째 칸
 }

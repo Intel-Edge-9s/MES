@@ -56,11 +56,6 @@ void ProcessWidget::add_process_item(QTreeWidgetItem *parent_item, const QString
     layout->setContentsMargins(0, 0, 0, 0);
     layout->setSpacing(5);
 
-    QPushButton *start_btn = new QPushButton("시작");
-    start_btn->setFixedWidth(80);
-    connect(start_btn, &QPushButton::clicked, this, [this, process_name]() {
-        on_start_clicked(process_name);
-    });
 
     QPushButton *stop_btn = new QPushButton("정지");
     stop_btn->setFixedWidth(80);
@@ -68,7 +63,6 @@ void ProcessWidget::add_process_item(QTreeWidgetItem *parent_item, const QString
         on_stop_clicked(process_name);
     });
 
-    layout->addWidget(start_btn);
     layout->addWidget(stop_btn);
     layout->addStretch();
 
@@ -76,50 +70,6 @@ void ProcessWidget::add_process_item(QTreeWidgetItem *parent_item, const QString
 }
 
 
-void ProcessWidget::on_start_clicked(const QString &process_name)
-{
-    Q_UNUSED(process_name);
-
-    bool ok = false;
-    QString orderId = QInputDialog::getText(
-                          this, "생산 시작", "Production Order ID 입력:",
-                          QLineEdit::Normal, "", &ok).trimmed();
-
-    if (!ok || orderId.isEmpty())
-        return;
-
-    auto task = ManufactureService::getProductionOrderById(orderId);
-    if (!task.valid) {
-        QMessageBox::warning(this, "오류", "생산오더를 찾을 수 없습니다.");
-        return;
-    }
-    if (task.status != "PENDING") {
-        QMessageBox::warning(this, "오류", "PENDING 상태 오더만 시작할 수 있습니다.");
-        return;
-    }
-    if (!m_ua) {
-        QMessageBox::warning(this, "오류", "OPC UA 서비스가 연결되지 않았습니다.");
-        return;
-    }
-    if (task.recipe.trimmed().isEmpty()) {
-        QMessageBox::warning(this, "오류", "product.recipe 값이 비어 있습니다.");
-        return;
-    }
-
-    if (!ManufactureService::markProductionOrderInProc(task.orderId)) {
-        QMessageBox::warning(this, "오류", "오더 상태를 INPROC로 변경하지 못했습니다.");
-        return;
-    }
-    if (!ManufactureService::createProductLog(task)) {
-        QMessageBox::warning(this, "오류", "생산 로그 생성에 실패했습니다.");
-        return;
-    }
-
-    m_ua->mfgWriteSpeed(task.motorSpeed <= 0 ? 100.0 : task.motorSpeed);
-    m_ua->mfgStartOrder(task.orderId, static_cast<quint16>(task.productNo), static_cast<quint32>(task.orderCount));
-
-    emit productionOrderStarted(task.orderId, task.productId, task.recipe);
-}
 
 void ProcessWidget::on_stop_clicked(const QString &process_name)
 {
@@ -128,8 +78,18 @@ void ProcessWidget::on_stop_clicked(const QString &process_name)
     if (!m_ua)
         return;
 
-    if (process_name == "제조 컨테이너 1")
+    if (process_name == "제조 컨테이너 1") {
         m_ua->mfgStopOrder();
+    }
+    else if (process_name == "컨베이어 벨트 1") {
+        m_ua->logStopMove(1);
+    }
+    else if (process_name == "컨베이어 벨트 2") {
+        m_ua->logStopMove(2);
+    }
+    else if (process_name == "컨베이어 벨트 3") {
+        m_ua->logStopMove(3);
+    }
 }
 
 void ProcessWidget::on_Back_btn_clicked()

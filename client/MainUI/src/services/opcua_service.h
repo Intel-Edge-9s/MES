@@ -48,7 +48,7 @@ public:
 
     Q_INVOKABLE void logWriteSpeed(int idx1to3, double speedPercent);
     Q_INVOKABLE void logMove(int wh1to3, quint32 qty);
-    Q_INVOKABLE void logStopMove();
+    Q_INVOKABLE void logStopMove(quint16 wh);
     Q_INVOKABLE void logWriteArrivalResult(bool ok, const QString &msg);
     Q_INVOKABLE void logClearArrivalRequest();
     Q_INVOKABLE void logConsumeItem(const QString &itemCode, quint32 qty);
