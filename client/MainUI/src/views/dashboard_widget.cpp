@@ -473,5 +473,3 @@ void DashboardWidget::on_ErrorLogBtn_clicked()
 {
     emit requestPageChange(PageType::EnvironmentLogs);
 }
-
-#include "dashboard_widget.moc"
