@@ -21,7 +21,8 @@ private slots:
     void on_cancel_order_button_clicked();
     void on_pushButton_clicked();
     void on_Back_btn_clicked();
-
+signals:
+    void activeInboundOrderChanged(int wh, const QString &orderId);
 private:
     Ui::ScmManageWidget *ui;
 

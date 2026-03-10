@@ -22,7 +22,7 @@ public:
 
 signals:
     void productionOrderStarted(const QString &orderId, const QString &productId, const QString &recipe);
-
+    void manualProcessStopRequested(const QString &processName);
 private slots:
     void on_stop_clicked(const QString &process_name);
     void on_Back_btn_clicked();

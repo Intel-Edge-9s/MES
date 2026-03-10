@@ -4,6 +4,7 @@
 #include <QMainWindow>
 #include <QMap>
 #include <QList>
+#include <QHash>
 #include "base/page_types.h"
 #include "opcua_service.h"
 #include "auth_service.h"
@@ -53,6 +54,8 @@ private:
 
     QMap<QString, int> m_itemStocks;
     QMap<QString, bool> m_itemLowFlags;
+
+    QHash<int, QString> m_activeInboundOrderIdByWh;
 
     void startOpcUaOnce();
     void setupNavigation();

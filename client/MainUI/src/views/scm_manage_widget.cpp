@@ -155,6 +155,7 @@ void ScmManageWidget::setupOpcBindings()
                     return;
                 }
                 m_activeOrderIdByWh[task.warehouseNo] = task.id;
+                emit activeInboundOrderChanged(task.warehouseNo, task.id);
 
                 qDebug() << "[SCM] call logMove wh =" << task.warehouseNo << "qty =" << task.stock;
                 ua->logMove(task.warehouseNo, static_cast<quint32>(task.stock));
@@ -201,6 +202,7 @@ void ScmManageWidget::setupOpcBindings()
                         return;
 
                     m_activeOrderIdByWh.remove(wh);
+                    emit activeInboundOrderChanged(wh, QString());
                     ScmManageService::markOrderDone(orderId);
 
                     qDebug() << "[SCM] WH" << wh << "DONE:" << orderId;

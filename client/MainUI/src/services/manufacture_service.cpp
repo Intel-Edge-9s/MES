@@ -258,6 +258,22 @@ bool ManufactureService::markProductionOrderWaitMaterial(const QString &orderId)
 
     return true;
 }
+bool ManufactureService::markProductionOrderError(const QString &orderId)
+{
+    QSqlQuery query;
+    query.prepare(
+        "UPDATE product_order_logs "
+        "SET status = 'ERROR', updated_at = NOW() "
+        "WHERE id = :id"
+        );
+    query.bindValue(":id", orderId);
+
+    if (!query.exec()) {
+        qDebug() << "markProductionOrderError failed:" << query.lastError().text();
+        return false;
+    }
+    return query.numRowsAffected() > 0;
+}
 
 bool ManufactureService::updateProductLogProgress(const QString &orderId, int prodCount, int defectCount, const QString &status)
 {

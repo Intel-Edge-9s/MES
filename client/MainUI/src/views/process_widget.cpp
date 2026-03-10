@@ -71,25 +71,11 @@ void ProcessWidget::add_process_item(QTreeWidgetItem *parent_item, const QString
 
 
 
+
 void ProcessWidget::on_stop_clicked(const QString &process_name)
 {
     qDebug() << "[정지 신호]" << process_name;
-
-    if (!m_ua)
-        return;
-
-    if (process_name == "제조 컨테이너 1") {
-        m_ua->mfgStopOrder();
-    }
-    else if (process_name == "컨베이어 벨트 1") {
-        m_ua->logStopMove(1);
-    }
-    else if (process_name == "컨베이어 벨트 2") {
-        m_ua->logStopMove(2);
-    }
-    else if (process_name == "컨베이어 벨트 3") {
-        m_ua->logStopMove(3);
-    }
+    emit manualProcessStopRequested(process_name);
 }
 
 void ProcessWidget::on_Back_btn_clicked()

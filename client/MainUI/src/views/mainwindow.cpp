@@ -6,6 +6,7 @@
 #include "partner_manage_widget.h"
 #include "process_widget.h"
 #include "manufacture_widget.h"
+#include "scm_manage_widget.h"
 #include "../core/database_manager.h"
 #include "../services/manufacture_service.h"
 #include "../services/scm_manage_service.h"
@@ -24,7 +25,7 @@ MainWindow::MainWindow(QWidget *parent)
     ua = new OpcUaService(this);
     auto* manufacture = qobject_cast<ManufactureWidget*>(ui->manufacturePage);
     auto* process = qobject_cast<ProcessWidget*>(ui->processPage);
-
+    auto* scmManage = qobject_cast<ScmManageWidget*>(ui->ScmManagePage);
     if (process) {
         process->setOpcUaService(ua);
 
@@ -38,6 +39,52 @@ MainWindow::MainWindow(QWidget *parent)
                     m_lastAttemptCount = 0;
                     m_lastDefectCount = 0;
                     m_materialStopRequested = false;
+                });
+        connect(process, &ProcessWidget::manualProcessStopRequested,
+                this, [this](const QString &processName){
+                    qDebug() << "[MAIN] manualProcessStopRequested =" << processName;
+
+                    if (!ua)
+                        return;
+
+                    // 제조 수동 정지
+                    if (processName == "제조 컨테이너 1") {
+                        if (!m_activeProdOrderId.isEmpty()) {
+
+                            ManufactureService::markProductionOrderError(m_activeProdOrderId);
+                            ManufactureService::updateProductLogProgress(
+                                m_activeProdOrderId,
+                                m_lastProdCount,
+                                m_lastDefectCount,
+                                "ERROR"
+                                );
+                        }
+
+                        ua->mfgStopOrder();
+                        clearActiveProduction();
+                        return;
+                    }
+
+                    // 물류 수동 정지
+
+                    int wh = 0;
+                    if (processName == "컨베이어 벨트 1") wh = 1;
+                    else if (processName == "컨베이어 벨트 2") wh = 2;
+                    else if (processName == "컨베이어 벨트 3") wh = 3;
+
+                    if (wh > 0) {
+                        const QString orderId = m_activeInboundOrderIdByWh.value(wh);
+
+
+
+                        if (!orderId.isEmpty()) {
+                            ScmManageService::markOrderError(orderId);
+                            m_activeInboundOrderIdByWh.remove(wh);
+                        }
+
+                        ua->logStopMove(static_cast<quint16>(wh));
+                        return;
+                    }
                 });
 
 
@@ -61,6 +108,21 @@ MainWindow::MainWindow(QWidget *parent)
     auto* dashboard = qobject_cast<DashboardWidget*>(ui->dashBoardPage);
     if (dashboard) {
         dashboard->set_opcua_service(ua);
+    }
+
+    if (scmManage) {
+        connect(scmManage, &ScmManageWidget::activeInboundOrderChanged,
+                this, [this](int wh, const QString &orderId){
+                    if (orderId.isEmpty()) {
+                        m_activeInboundOrderIdByWh.remove(wh);
+                    } else {
+                        m_activeInboundOrderIdByWh[wh] = orderId;
+                    }
+
+                    qDebug() << "[MAIN] active inbound order changed:"
+                             << "wh =" << wh
+                             << "orderId =" << orderId;
+                });
     }
 
     connect(ua, &OpcUaService::mfgTempUpdated, this, [this](double temp){
@@ -234,20 +296,29 @@ MainWindow::~MainWindow() {
     delete ui;
 }
 
+
 void MainWindow::requestMaterialStop(const QString &reason)
 {
     if (m_activeProdOrderId.isEmpty() || m_materialStopRequested)
         return;
+
     qDebug() << "[MES] requestMaterialStop reason =" << reason;
     m_materialStopRequested = true;
 
 
+    ManufactureService::markProductionOrderError(m_activeProdOrderId);
+    ManufactureService::updateProductLogProgress(
+        m_activeProdOrderId,
+        m_lastProdCount,
+        m_lastDefectCount,
+        "ERROR"
+        );
 
-    ManufactureService::updateProductLogProgress(m_activeProdOrderId, m_lastProdCount, m_lastDefectCount, "INPROC");
     if (ua)
         ua->mfgStopOrder();
-}
 
+    clearActiveProduction();
+}
 
 
 void MainWindow::clearActiveProduction()

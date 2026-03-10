@@ -36,6 +36,7 @@ public:
 
     static bool markOrderInProc(const QString& orderId);
     static bool markOrderDone(const QString& orderId);
+    static bool markOrderError(const QString& orderId);
     static bool increaseInventoryByOrderId(const QString& orderId, int delta);
 
     static RawMaterialStockSnapshot getRawMaterialStockSnapshot();

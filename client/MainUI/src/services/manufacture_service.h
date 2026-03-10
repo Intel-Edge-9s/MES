@@ -20,6 +20,7 @@ public:
     static bool updateProductLogProgress(const QString &orderId, int prodCount, int defectCount, const QString &status);
     static bool increaseProductStock(const QString &productId, int delta);
     static bool consumeRecipeItems(const QString &productId, int producedDelta);
+    static bool markProductionOrderError(const QString &orderId);
 
     // INSERT
     static bool createProductLog(const ProductionOrderTask &task);

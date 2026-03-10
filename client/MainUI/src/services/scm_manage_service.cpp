@@ -152,13 +152,13 @@ bool ScmManageService::markOrderError(const QString& orderId)
     QSqlQuery query;
     query.prepare(
         "UPDATE inventory_order_logs "
-        "SET status = 'INPROC', updated_at = NOW() "
-        "WHERE id = :id AND status = 'ERROR'"
+        "SET status = 'ERROR', updated_at = NOW() "
+        "WHERE id = :id"
         );
     query.bindValue(":id", orderId);
 
     if (!query.exec()) {
-        qDebug() << "markOrderInProc failed:" << query.lastError().text();
+        qDebug() << "markOrderError failed:" << query.lastError().text();
         return false;
     }
     return query.numRowsAffected() > 0;
