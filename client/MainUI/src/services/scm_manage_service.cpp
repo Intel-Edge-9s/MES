@@ -147,6 +147,23 @@ bool ScmManageService::markOrderInProc(const QString& orderId)
     return query.numRowsAffected() > 0;
 }
 
+bool ScmManageService::markOrderError(const QString& orderId)
+{
+    QSqlQuery query;
+    query.prepare(
+        "UPDATE inventory_order_logs "
+        "SET status = 'INPROC', updated_at = NOW() "
+        "WHERE id = :id AND status = 'ERROR'"
+        );
+    query.bindValue(":id", orderId);
+
+    if (!query.exec()) {
+        qDebug() << "markOrderInProc failed:" << query.lastError().text();
+        return false;
+    }
+    return query.numRowsAffected() > 0;
+}
+
 bool ScmManageService::markOrderDone(const QString& orderId)
 {
     QSqlQuery query;
