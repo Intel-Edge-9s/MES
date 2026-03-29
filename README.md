@@ -42,3 +42,72 @@
 ├── servers                # OPC UA 제조(MFG) 및 물류(LOG) 서버 소스
 ├── servers_mod            # Modbus 통신 기능이 통합된 서버 소스
 └── README.md              # 프로젝트 문서
+
+
+
+
+## 🔍 상세 기능 설명
+
+### 1. OPC UA (Communication Layer)
+- **정보 모델링**  
+  설비 데이터를 노드(Node) 단위로 구조화하여 하드웨어에 종속되지 않는 통신 환경을 구축
+
+- **보안 (Security)**  
+  Basic256Sha256 암호화 + 인증서 기반 상호 인증으로 제조 데이터 보호
+
+- **구독 (Subscription)**  
+  데이터 변경 시 서버 → 클라이언트로 즉시 알림  
+  → 불필요한 polling 제거 및 통신 효율 최적화
+
+
+### 2. PLC Simulator & Modbus TCP
+- **가상 공정 모사**  
+  OpenPLC 기반으로 컨베이어 및 센서 동작을 소프트웨어적으로 구현
+
+- **제어 게이트웨이**  
+  OPC UA 명령을 Modbus TCP 레지스터로 변환하여  
+  가상 PLC 설비를 실시간 제어
+
+
+### 3. Database (MariaDB)
+- **데이터 통합**  
+  환경 데이터 및 생산 이력을 중앙 DB에 저장  
+  → 전 공정 데이터 추적 및 투명성 확보
+
+- **최적화 알고리즘**  
+  - EDD (Earliest Due Date)  
+  - SPT (Shortest Processing Time)  
+  기반 스케줄링을 SQL로 구현하여 생산 효율 향상
+
+
+### 4. UI (HMI Dashboard)
+- **직관적 모니터링**  
+  Qt 기반 UI로 실시간 공정 데이터 및 설비 상태 시각화
+
+- **영상 스트리밍**  
+  GStreamer 연동 → 원격에서 공정 상황 실시간 확인 가능
+
+
+---
+
+## 🖼 시연 화면
+
+| 대시보드 | 공정 제어 | 재고 관리 |
+|----------|----------|----------|
+| (이미지 추가) | (이미지 추가) | (이미지 추가) |
+
+
+---
+
+## 🎬 시연 영상
+
+- [YouTube 또는 저장소 내 영상 경로 등록]
+
+
+---
+
+## ⚠️ 보완점 및 향후 과제
+
+- Factory I/O 연동을 통한 **3D 디지털 트윈 환경 고도화**
+- 환경 로그 기반 **예측 정비(PHM, Prognostics & Health Management)** 도입
+- Edge Computing 기반 **실시간 데이터 전처리 시스템 구축**
