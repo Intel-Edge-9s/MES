@@ -98,7 +98,7 @@
 
 ## 🎬 시연 영상
 
-- [YouTube 또는 저장소 내 영상 경로 등록]
+[시연 영상](https://youtu.be/1vxq-CGKPnM?si=vq-Lm9WFESoSZ874)
 
 
 ---
