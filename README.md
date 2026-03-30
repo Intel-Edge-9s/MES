@@ -98,6 +98,7 @@
 
 ## 🎬 시연 영상
 
+[![Youtube Link](http://img.youtube.com/vi/1vxq-CGKPnM/0.jpg)](https://youtu.be/1vxq-CGKPnM) 
 [Youtube Link](https://youtu.be/1vxq-CGKPnM?si=vq-Lm9WFESoSZ874)
 
 
