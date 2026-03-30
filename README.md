@@ -109,3 +109,15 @@
 - 환경 로그 기반 **예측 정비(PHM, Prognostics & Health Management)** 도입
 - Edge Computing 기반 **실시간 데이터 전처리 시스템 구축**
 - 전반적인 시스템의 예외 처리 개선, UI 개선
+
+---
+
+## 💁‍♂️ 팀원
+
+| 이름 | 역할 | 담당 파트 |
+|----------|----------|----------|
+| 안해성 | PM(팀장) | UI Sub, BE Sub, OPEN PLC |
+| 안형준 | PL, BE | OPC-UA |
+| 윤민주 | FE | UI Sub, PLC관련 Research |
+| 배현규 | BE | UI Sub, MODBUS |
+| 박준서 | BE, FE | UI Main, BE Main(DB), Architecting |
