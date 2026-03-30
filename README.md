@@ -98,7 +98,7 @@
 
 ## 🎬 시연 영상
 
-[시연 영상](https://youtu.be/1vxq-CGKPnM?si=vq-Lm9WFESoSZ874)
+[Youtube Link](https://youtu.be/1vxq-CGKPnM?si=vq-Lm9WFESoSZ874)
 
 
 ---
