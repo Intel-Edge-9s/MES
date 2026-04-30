@@ -91,7 +91,7 @@
 
 | 대시보드 | 공정 제어 | 재고 관리 |
 |----------|----------|----------|
-| (Images/DashBoard_MES.png) | (Conveyor_Control_MES.png) | (Stock_Manage_MES.png) |
+| (Image/DashBoard_MES.png) | (Image/Conveyor_Control_MES.png) | (Image/Stock_Manage_MES.png) |
 
 
 ---
