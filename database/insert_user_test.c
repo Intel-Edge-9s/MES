@@ -1,3 +1,5 @@
+// DB 연동 확인용 테스트 코드 입니다. 실제 프로젝트 로직에 사용되지 않습니다.
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
