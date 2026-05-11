@@ -4,16 +4,25 @@
 
 프로젝트에서 사용하는 **OpenPLC**는 OPC UA 프로토콜을 기본적으로 지원하지 않는다.
 OPC UA Server와 제어 신호 및 데이터를 주고받기 위해 두 프로토콜 사이를 중계하는 **Modbus-to-OPC UA 브리지**를 별도로 구성했다.
+OPC UA Server에서 발생한 컨베이어 제어 신호는 Modbus를 통해 OpenPLC로 전달되며, 이를 통해 컨베이어의 ON/OFF 제어 및 재고 수량, 생산량 등의 데이터를 갱신한다.
 
 ```
-[OpenPLC Simulator]
-    Modbus TCP (port 502)
-          ↓
+[OPC UA Client]
+      │  제어 명령 (컨베이어 ON/OFF 등)
+      ▼
+[OPC UA Server (port 4840)]
+      │  Modbus TCP (port 502)
+      ▼
 [Modbus-to-OPC UA Bridge]
-          ↓
-  [OPC UA Server (port 4840)]
-          ↓
-    [OPC UA Client]
+      │  coil write / register read
+      ▼
+[OpenPLC Simulator]
+      │  재고 수량, 생산량 갱신
+      ▼
+[Modbus-to-OPC UA Bridge]
+      │  상태 데이터 반환
+      ▼
+[OPC UA Server (port 4840)]
 ```
 
 > Modbus를 선택한 이유: 메인 통신 프로토콜이 아닌 PLC 내부 연동 구간에 해당하므로,
