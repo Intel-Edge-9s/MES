@@ -77,6 +77,49 @@
 | FBD | SCM | MANU |
 |----------|----------|----------|
 | ![FBD](./Image/openplc_conveyor.png) | ![SCM](./Image/openplc_scm.png) | ![MANU](./Image/openplc_manufacture.png) |
+
+## Modbus TCP
+
+### 배경 및 필요성
+
+프로젝트에서 사용하는 **OpenPLC**는 OPC UA 프로토콜을 기본적으로 지원하지 않는다.
+OPC UA Server와 제어 신호 및 데이터를 주고받기 위해 두 프로토콜 사이를 중계하는 **Modbus-to-OPC UA 브리지**를 별도로 구성했다.
+OPC UA Server에서 발생한 컨베이어 제어 신호는 Modbus를 통해 OpenPLC로 전달되며, 이를 통해 컨베이어의 ON/OFF 제어 및 재고 수량, 생산량 등의 데이터를 갱신한다.
+
+```
+[OPC UA Client]
+      │  제어 명령 (컨베이어 ON/OFF 등)
+      ▼
+[OPC UA Server (port 4840)]
+      │  Modbus TCP (port 502)
+      ▼
+[Modbus-to-OPC UA Bridge]
+      │  coil write / register read
+      ▼
+[OpenPLC Simulator]
+      │  재고 수량, 생산량 갱신
+      ▼
+[Modbus-to-OPC UA Bridge]
+      │  상태 데이터 반환
+      ▼
+[OPC UA Server (port 4840)]
+```
+
+> Modbus를 선택한 이유: 메인 통신 프로토콜이 아닌 PLC 내부 연동 구간에 해당하므로,
+> 구조가 단순하고 구현 부담이 적은 프로토콜이 적합했다.
+
+---
+
+### Modbus의 특징
+
+| 특징 | 설명 |
+|------|------|
+| 마스터-슬레이브 구조 | 마스터가 요청을 보내고 슬레이브가 응답하는 단방향 주도 방식 |
+| 결정론적 타이밍 | 응답 시점이 예측 가능하여 실시간 제어 환경에 적합 |
+| 단순·경량 | 저사양 장비(8비트 마이크로컨트롤러 등)에서도 동작 가능 |
+
+---
+
 ### 3. Database (MariaDB)
 - **데이터 통합**  
   환경 데이터 및 생산 이력을 중앙 DB에 저장  
