@@ -78,9 +78,9 @@
 |----------|----------|----------|
 | ![FBD](./Image/openplc_conveyor.png) | ![SCM](./Image/openplc_scm.png) | ![MANU](./Image/openplc_manufacture.png) |
 
-## Modbus TCP
+#### Modbus TCP
 
-### 배경 및 필요성
+#### 배경 및 필요성
 
 프로젝트에서 사용하는 **OpenPLC**는 OPC UA 프로토콜을 기본적으로 지원하지 않는다.
 OPC UA Server와 제어 신호 및 데이터를 주고받기 위해 두 프로토콜 사이를 중계하는 **Modbus-to-OPC UA 브리지**를 별도로 구성했다.
