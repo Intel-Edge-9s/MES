@@ -71,9 +71,12 @@
     - 설정된 시간 간격으로 주기적인 카운트 업데이트
 
   - **원재료 입고 / 완성품 생산 라인 설계**  
-    - Conveyor 사용자 정의 기능 블록을 묶어 각각의 가상 라인 구축
+    - 3개의 Conveyor FBD를 조합해 각각의 가상 라인 구축
     - 컨베이어 상태에 따른 LED 점등
 
+| FBD | SCM | MANU |
+|----------|----------|----------|
+| ![FBD](./Image/openplc_conveyor.png) | ![SCM](./Image/openplc_scm.png) | ![MANU](./Image/openplc_manufacture.png) |
 ### 3. Database (MariaDB)
 - **데이터 통합**  
   환경 데이터 및 생산 이력을 중앙 DB에 저장  
