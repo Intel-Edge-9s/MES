@@ -84,22 +84,191 @@ Presenter: View와 Model 사이의 중간 다리 역할. Model로부터 데이�
 
 ---
 
-## 🔍 상세 기능 설명
 
-### 1. OPC UA (Communication Layer)
-- **정보 모델링**  
-  설비 데이터를 노드(Node) 단위로 구조화하여 하드웨어에 종속되지 않는 통신 환경을 구축
+## OPC UA (Communication Layer)
 
-- **보안 (Security)**  
-  Basic256Sha256 암호화 + 인증서 기반 상호 인증으로 제조 데이터 보호
+![OPC UA 기반 MES 통신 구조](./Image/opc_ua_mes_communication_structure_subscription.png)
 
-- **구독 (Subscription)**  
-  데이터 변경 시 서버 → 클라이언트로 즉시 알림  
-  → 불필요한 polling 제거 및 통신 효율 최적화
+<details>
+<summary><strong>OPC UA 기반 MES 통신 구조</strong></summary>
 
 <br>
 
-### 2. PLC Simulator & Modbus TCP
+본 프로젝트에서는 **Qt 기반 MES Client**에서 OPC UA 통신 모듈을 구현하여 제조 서버(MFG Server)와 물류 서버(LOG Server)의 데이터를 연동하였다.  
+OPC UA 통신은 `open62541` 라이브러리를 기반으로 구성하였으며, MES 화면에서 설비 상태를 실시간으로 모니터링하고 생산 및 물류 제어 명령을 서버로 전달할 수 있도록 구현하였다.
+
+## 1. 시스템 구성
+
+
+
+MES Client는 크게 `Qt UI`, `OpcUaService`, `Worker Thread`, `open62541 OPC UA Client`로 구성된다.
+
+- `Qt UI`는 생산 및 물류 상태를 표시하고 사용자의 명령을 입력받는 화면 역할을 한다.
+- `OpcUaService`는 Qt UI와 OPC UA 통신부를 연결하는 브리지 역할을 한다.
+- `Worker Thread`는 OPC UA 통신을 백그라운드에서 처리하여 UI가 멈추지 않도록 한다.
+- `open62541 OPC UA Client`는 제조 서버와 물류 서버에 각각 연결되어 실제 OPC UA 통신을 수행한다.
+
+본 프로젝트에서는 제조 영역과 물류 영역을 분리하기 위해 두 개의 OPC UA Server에 연결하였다.
+
+| 구분 | 역할 | 주요 데이터 |
+|---|---|---|
+| MFG Server | 제조 공정 데이터 연동 | 생산 상태, 온습도, 컨베이어 속도, 생산 수량, 불량 수량, 작업 시작/정지 |
+| LOG Server | 물류 및 재고 데이터 연동 | 물류 상태, 창고 적재 상태, 재고 수량, 저재고 알림, 물류 이동/소비 명령 |
+
+## 2. OPC UA 연결 흐름
+
+OPC UA 연결은 다음 순서로 이루어진다.
+
+1. TCP 연결
+2. HEL / ACK 교환
+3. OpenSecureChannel 생성
+4. CreateSession
+5. ActivateSession
+6. Subscription 기반 실시간 구독 생성
+7. 실제 데이터 통신 시작
+
+코드에서 HEL/ACK, SecureChannel 생성, Session 생성, ActivateSession 과정을 직접 패킷 단위로 구현하지는 않았다.  
+해당 과정은 `open62541` 라이브러리의 `UA_Client_connectUsername()` 함수 호출 과정에서 내부적으로 처리된다.
+
+즉, 프로젝트 코드에서는 OPC UA 연결의 저수준 패킷 처리를 직접 작성하기보다는, `open62541` 라이브러리를 사용하여 Client 설정, 보안 설정, 인증, 서버 연결, 데이터 송수신 로직을 구현하였다.
+
+## 3. 보안 설정
+
+본 프로젝트의 OPC UA Client는 인증서 기반 보안 통신을 사용한다.
+
+| 항목 | 설정 |
+|---|---|
+| SecurityMode | `SignAndEncrypt` |
+| SecurityPolicy | `Basic256Sha256` |
+| 인증 방식 | Username / Password |
+| Client 인증서 | 사용 |
+| Client Key | 사용 |
+| Trust Server 인증서 | 사용 |
+
+Client는 연결 전에 인증서, 개인키, 신뢰할 서버 인증서를 로드한다.  
+이후 `UA_ClientConfig_setDefaultEncryption()`을 통해 암호화 설정을 적용하고, `SignAndEncrypt` 모드로 서버와 통신한다.
+
+따라서 이 프로젝트의 OPC UA 통신은 단순 평문 통신이 아니라, **암호화와 서명이 적용된 보안 채널**을 기반으로 동작한다.
+
+## 4. 데이터 송수신 구조
+
+연결 이후 MES Client는 OPC UA의 주요 기능인 `Write`, `Method Call`, `Subscription`을 사용한다.
+
+### 4.1 Write
+
+`Write`는 MES에서 서버의 특정 Node 값을 변경할 때 사용한다.
+
+예를 들어 MES 화면에서 컨베이어 속도를 변경하면, 해당 값이 OPC UA Server의 Node에 쓰인다.
+
+예시 Node는 다음과 같다.
+
+- `mfg/conveyor_speed`
+- `log/conveyor_speed1`
+- `log/conveyor_speed2`
+- `log/conveyor_speed3`
+
+이를 통해 MES 화면에서 제조 및 물류 설비의 속도 값을 제어할 수 있다.
+
+### 4.2 Method Call
+
+`Method Call`은 서버에 정의된 기능을 MES Client에서 호출하는 방식이다.
+
+본 프로젝트에서는 생산 시작, 생산 정지, 물류 이동, 자재 소비 등의 명령을 Method Call로 처리하였다.
+
+| Method | 설명 |
+|---|---|
+| `mfg/StartOrder` | 생산 작업 시작 |
+| `mfg/StopOrder` | 생산 작업 정지 |
+| `log/Move` | 물류 이동 시작 |
+| `log/StopMove` | 물류 이동 정지 |
+| `log/Consume` | 자재 소비 처리 |
+| `log/InitItemStocks` | 초기 재고 설정 |
+
+즉, 단순히 Node 값을 읽고 쓰는 것뿐만 아니라, 서버 측에 정의된 동작을 직접 실행하는 구조를 구현하였다.
+
+### 4.3 Subscription 기반 실시간 데이터 구독
+
+본 프로젝트에서는 OPC UA의 `Subscription` 기능을 사용하여 제조 서버와 물류 서버의 주요 데이터를 실시간으로 구독하였다.
+
+Client는 생산 상태, 온습도, 생산 수량, 불량 수량, 창고 적재 상태, 재고 수량, 저재고 여부 등의 Node를 구독 대상으로 등록하였다.  
+서버의 값이 변경되면 DataChange Callback이 실행되고, 콜백 내부에서 데이터 타입을 판별한 뒤 Qt Signal을 발생시켜 MES UI에 실시간으로 반영하였다.
+
+데이터 흐름은 다음과 같다.
+
+```text
+Server Node 값 변경
+        ↓
+Subscription 기반 데이터 구독
+        ↓
+DataChange Callback 실행
+        ↓
+Qt Signal emit
+        ↓
+MES UI 실시간 갱신
+```
+
+예를 들어 제조 서버의 상태값이 변경되면 다음과 같은 흐름으로 UI가 갱신된다.
+
+```text
+mfg/status 변경
+        ↓
+Subscription 감지
+        ↓
+dataChangeCb()
+        ↓
+mfgStatusUpdated()
+        ↓
+Qt UI 반영
+```
+
+이를 통해 생산 상태, 온습도, 생산 수량, 불량률, 창고 적재 상태, 재고 부족 여부 등을 실시간으로 모니터링할 수 있다.
+
+## 5. 자동 재접속 구조
+
+OPC UA 통신 안정성을 높이기 위해 자동 재접속 구조를 구현하였다.
+
+`Worker Thread`에서는 주기적으로 `UA_Client_run_iterate()`를 호출하여 OPC UA Client의 상태를 확인한다.  
+서버 연결이 끊기거나 오류가 발생하면 기존 연결을 정리하고, 일정 시간 간격으로 재접속을 시도한다.
+
+재접속 흐름은 다음과 같다.
+
+```text
+UA_Client_run_iterate()로 연결 상태 확인
+        ↓
+오류 발생 감지
+        ↓
+기존 Client 연결 정리
+        ↓
+3초 간격으로 재접속 시도
+        ↓
+연결 성공 시 Subscription 재등록
+```
+
+이를 통해 서버가 일시적으로 중단되거나 네트워크 문제가 발생하더라도, MES Client가 자동으로 복구를 시도할 수 있도록 하였다.
+
+## 6. 구현 기능 요약
+
+본 프로젝트에서 구현한 OPC UA 통신 기능은 다음과 같다.
+
+- Qt 기반 MES Client와 OPC UA Server 연동
+- MFG Server / LOG Server 이중 연결 구조 구현
+- Client 인증서, Key, Trust Server 인증서를 활용한 보안 통신 구성
+- `SignAndEncrypt` / `Basic256Sha256` 기반 보안 채널 적용
+- Username / Password 기반 Session 인증 처리
+- 제조 및 물류 데이터 Node Write 기능 구현
+- 생산 시작, 정지, 물류 이동, 자재 소비 등 Method Call 기능 구현
+- Subscription 기반 실시간 데이터 구독 및 UI 갱신
+- 연결 상태 확인 및 3초 간격 자동 재접속 구조 구현 
+
+</details>
+
+
+
+<br>
+
+---
+
+## PLC Simulator & Modbus TCP
 
 - **가상 컨베이어 라인 설계**
 - **개발 환경** : OpenPLC Editor (LADDER LOGIC)
@@ -157,7 +326,9 @@ OPC UA Server에서 발생한 컨베이어 제어 신호는 Modbus를 통해 Ope
 
 <br>
 
-### 3. Database (MariaDB)
+---
+
+## Database (MariaDB)
 - **데이터 통합**  
   환경 데이터 및 생산 이력을 중앙 DB에 저장  
   → 전 공정 데이터 추적 및 투명성 확보
@@ -315,12 +486,13 @@ SELECT * FROM user_password;
 
 <br>
 
-### 4. UI (HMI Dashboard)
+---
+
+## UI (HMI Dashboard)
 - **직관적 모니터링**  
   Qt 기반 UI로 실시간 공정 데이터 및 설비 상태 시각화
 
 
----
 
 ## 🖼 시연 화면
 
