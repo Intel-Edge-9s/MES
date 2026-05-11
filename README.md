@@ -46,6 +46,44 @@
 ```
 ---
 
+## 🖥️ 아키텍처 패턴
+
+![MVP](./Image/MVP_MES.png)
+
+<details>
+  <summary><strong>MVP (Model View Presenter)</strong></summary>
+
+<br>
+
+  **1. MVP 패턴이란?**
+MVP 패턴은 UI(View)와 Model을 완전히 분리하고, 그 사이를 Presenter가 Controll하는 구조
+
+Model: 데이터 처리, DB 연동(MariaDB), OPC UA 통신 로직 및 데이터 구조 정의
+
+View: 사용자 인터페이스(Qt Widgets). Presenter의 지시에 따라 화면을 그리며, 사용자 이벤트를 Presenter로 전달
+
+Presenter: View와 Model 사이의 중간 다리 역할. Model로부터 데이터를 받아 가공하고, View에게 어떤 데이터를 어떻게 표시할지 전달
+
+**2. 왜 MVP를 선택했는가? (Why MVP?)**
+
+**A. 비동기 통신(OPC UA) 환경에서의 안정성**
+
+문제점(MVC): MVC 구조에서는 비동기 데이터가 들어올 때 (즉, 통신하는 동안) View가 직접 Model을 참조하거나 갱신에 관여하여 화면 프리징(Freezing)이나 의존성 문제가 발생 가능
+
+해결책(MVP): Presenter가 비동기 데이터를 먼저 수신하여 검증 및 가공을 거친 후, View를 업데이트 하도록 지시함, 이를 통해 데이터 흐름에 따라 직관적으로 UI제어 가능
+
+<br>
+
+**B. Qt Widget 개발 효율성**
+
+문제점(MVVM): Qt Widgets 환경에서 수많은 페이지를 구현할 경우 Q_PROPERTY 선언과 복잡한 Signal/Slot 연결 필요
+
+해결책(MVP): Presenter가 명시적으로 View의 인터페이스를 호출하는 방식으로, 복잡한 바인딩 설정 없이도 다수의 페이지를 깔끔하고 유지보수하기 쉬운 코드로 관리 가능
+  
+</details>
+
+---
+
 ## 🔍 상세 기능 설명
 
 ### 1. OPC UA (Communication Layer)
@@ -59,6 +97,7 @@
   데이터 변경 시 서버 → 클라이언트로 즉시 알림  
   → 불필요한 polling 제거 및 통신 효율 최적화
 
+<br>
 
 ### 2. PLC Simulator & Modbus TCP
 
@@ -108,8 +147,6 @@ OPC UA Server에서 발생한 컨베이어 제어 신호는 Modbus를 통해 Ope
 > Modbus를 선택한 이유: 메인 통신 프로토콜이 아닌 PLC 내부 연동 구간에 해당하므로,
 > 구조가 단순하고 구현 부담이 적은 프로토콜이 적합했다.
 
----
-
 ### Modbus의 특징
 
 | 특징 | 설명 |
@@ -118,7 +155,7 @@ OPC UA Server에서 발생한 컨베이어 제어 신호는 Modbus를 통해 Ope
 | 결정론적 타이밍 | 응답 시점이 예측 가능하여 실시간 제어 환경에 적합 |
 | 단순·경량 | 저사양 장비(8비트 마이크로컨트롤러 등)에서도 동작 가능 |
 
----
+<br>
 
 ### 3. Database (MariaDB)
 - **데이터 통합**  
@@ -130,6 +167,153 @@ OPC UA Server에서 발생한 컨베이어 제어 신호는 Modbus를 통해 Ope
   - SPT (Shortest Processing Time)  
   기반 스케줄링을 SQL로 구현하여 생산 효율 향상
 
+![ERD](./Image/DataBase_ERD_MES.png)
+
+<details>
+<summary><strong>DB 상세 내용</strong></summary>
+
+<br>
+
+- 다이어그램 링크 : [dbdiagram.io](https://dbdiagram.io/d/699e5a9ebd82f5fce2baed75)
+
+## Why MariaDB?
+- 무료 라이센스
+- 미니 프로젝트에 적합
+- 간단한 쿼리 처리에 용이함
+- 촉박한 개발 일정으로 인해 현재 팀원에게 친숙한 MariaDB 채택
+
+| 항목 | Oracle Database | MariaDB | PostgreSQL | MongoDB |
+|---|---|---|---|---|
+| DB 유형 | 상용 RDBMS | 오픈소스 RDBMS (MySQL 포크) | 오픈소스 RDBMS | NoSQL (Document) |
+| 라이선스 비용 | 매우 높음 | 무료 (GPL) | 무료 (PostgreSQL License) | 커뮤니티 무료 / 상용 옵션 |
+| 초기 도입 비용 | 높음 | 낮음 | 낮음 | 낮음 |
+| 난이도 | 높음 | 낮음~중간 | 중간 | 낮음 |
+| SQL 표준 준수 | 매우 높음 | MySQL 기반 (보통) | 매우 높음 | SQL 미지원 (자체 쿼리) |
+| 트랜잭션 안정성 | 매우 강함 | 안정적 (InnoDB) | 매우 강함 (ACID 강력) | 문서 단위 트랜잭션 |
+| 복잡한 쿼리 처리 | 매우 강함 | 보통 | 매우 강함 | 제한적 (JOIN 약함) |
+| 확장성 | 엔터프라이즈급 | 수평 확장 제한적 | 확장 가능 | 수평 확장 매우 용이 |
+| JSON 지원 | 제한적 | 지원 | 매우 강력 | 기본 구조가 JSON |
+| 대규모 기업 사용 | 금융/대기업 표준 | 중소~중견 기업 | 대규모 서비스 | 스타트업/빅데이터 |
+| 운영 관리 | 전문 DBA 필요 | 비교적 쉬움 | 튜닝 필요 | 비교적 쉬움 |
+| 생태계 | 기업 중심 | MySQL과 높은 호환 | 기술 중심 커뮤니티 | 개발 친화적 |
+
+<br>
+
+---
+
+<details>
+  <summary><strong>DB 설치 및 환경 구축 방법</strong></summary>
+
+  ### 1. MariaDB 설치 및 계정 설정
+**라즈베리 파이(ubuntu) 환경에서 MariaDB를 설치하고 관리자 계정을 생성**
+```bash
+# 패키지 업데이트 및 설치
+sudo apt-get update
+sudo apt install mariadb-server=1:11.8.3-0+deb13u1
+
+# MariaDB 접속 및 권한 설정
+sudo mariadb
+```
+```SQL
+-- 관리자 계정 생성 및 권한 부여
+CREATE USER 'admin'@'localhost' IDENTIFIED BY 'pw1234';
+GRANT ALL PRIVILEGES ON Smart_MES_Core.* TO 'admin'@'localhost';
+FLUSH PRIVILEGES;
+EXIT;
+```
+
+<br>
+
+### 2. 데이터베이스 스키마 생성 (DDL)
+```SQL
+CREATE DATABASE IF NOT EXISTS Smart_MES_Core;
+USE Smart_MES_Core;
+
+-- 1. 공정 정보 테이블
+CREATE TABLE `process` (
+    `id` UUID PRIMARY KEY,
+    `process_name` VARCHAR(20) NOT NULL
+) ENGINE=InnoDB;
+
+-- 2. 유저 정보 테이블
+CREATE TABLE `user` (
+    `id` UUID PRIMARY KEY,
+    `user_name` VARCHAR(20) NOT NULL,
+    `role` VARCHAR(10),
+    `process_id` UUID,
+    `face_featured_path` VARCHAR(50),
+    `rfid` VARCHAR(10)
+) ENGINE=InnoDB;
+
+-- 3. 유저 패스워드 테이블 (SHA-512)
+CREATE TABLE `user_password` (
+    `id` UUID PRIMARY KEY,
+    `user_id` UUID NOT NULL,
+    `password_hash` VARCHAR(128) NOT NULL,
+    `salt` VARCHAR(64) NOT NULL,
+    FOREIGN KEY (`user_id`) REFERENCES `user`(`id`) ON DELETE CASCADE
+) ENGINE=InnoDB;
+
+-- [ 나머지 4~13번 테이블 생략 - 필요 시 추가 가능 ]
+-- 10. 생산 계획 및 지시 테이블 (수정 포함)
+CREATE TABLE `product_order_logs` (
+    `id` UUID PRIMARY KEY,
+    `user_id` UUID,
+    `product_id` UUID,
+    `order_count` INT,
+    `motor_speed` INT,
+    `status` VARCHAR(10),
+    `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    `updated_at` TIMESTAMP NULL DEFAULT NULL,
+    `deadline_at` TIMESTAMP NULL COMMENT '주문 완료 목표 시각',
+    FOREIGN KEY (`user_id`) REFERENCES `user`(`id`)
+) ENGINE=InnoDB;
+```
+
+<br>
+
+### 3. 연동 테스트 코드 (C언어)
+
+**MariaDB 접속 및 권한 설정**
+
+```bash
+sudo apt-get install \
+    libmariadb-dev=1:11.8.3-0+deb13u1 \
+    uuid-dev:arm64=2.41-5 \
+    libssl-dev:arm64=3.5.4-1~deb13u2+rpt1
+```
+
+**테스트 코드 빌드 및 실행**
+
+**1. 유저 데이터 생성(insert_user_test.c)**
+UUID 생성 및 OpenSSL을 이용한 SHA-512 솔팅(Salting) 적용
+
+```bash
+gcc insert_user_test.c -o insert_user_test $(pkg-config --cflags --libs mariadb) -luuid -lcrypto
+./insert_user_test
+```
+
+**2. 로그인 인증 확인 (cert_password.c)**
+DB에서 Salt를 가져와 입력된 패스워드와 비교 검증
+
+```bash
+gcc cert_password.c -o cert_password $(pkg-config --cflags --libs mariadb) -lcrypto
+./cert_password
+```
+
+**3. 데이터 확인**
+```bash
+mariadb -u admin -p
+use Smart_MES_Core
+SELECT * FROM user;
+SELECT * FROM user_password;
+```
+  
+</details>
+
+</details>
+
+<br>
 
 ### 4. UI (HMI Dashboard)
 - **직관적 모니터링**  
