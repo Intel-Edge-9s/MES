@@ -24,7 +24,7 @@
 | :--- | :--- |
 | **Languages** | C, C++ |
 | **Communication** | OPC UA (open62541), Modbus TCP |
-| **Frameworks** | Qt 6, GStreamer |
+| **Frameworks** | Qt 6 |
 | **Database** | MariaDB |
 | **Hardware/OS** | Raspberry Pi 3EA, OpenPLC (Simulator) |
 
