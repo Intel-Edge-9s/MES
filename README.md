@@ -598,7 +598,7 @@ SELECT * FROM user_password;
 | 이름 | 역할 | 담당 파트 |
 |----------|----------|----------|
 | 안해성 | PM(팀장) | QT(UI Main), BE Sub, OPEN PLC |
-| 안형준 | PL, BE | OPC-UA |
+| 안형준 | PL, BE | QT(UI Sub), OPC-UA |
 | 윤민주 | FE | QT(UI Sub), PLC관련 Research |
 | 배현규 | BE | QT(UI Sub), MODBUS |
 | 박준서 | BE, FE | QT(UI Sub), Database, Architecting |
